@@ -1,37 +1,70 @@
 <div class="upload-container">
-     <label for="fileInput" class="file-label">
-          Envie uma pasta de XMLs em .ZIP
-     </label>
 
-     <input
-          type="file"
-          id="fileInput"
-          (change)="onFileSelected($event)"
-          accept=".zip"
-          class="file-input"
-          [disabled]="isUploading"
-     />
-     
-     @if (selectedFile) {
-          <span class="file-name"> {{ selectedFile.name }}</span>
-     } @else {
-          <span class="file-name"> Nenhum arquivo selecionado </span>
-     }
+  <div class="mode-switcher">
+    <label>
+      <input 
+        type="radio" 
+        name="uploadMode" 
+        value="zip" 
+        [(ngModel)]="uploadMode"
+        (ngModelChange)="onModeChange()">
+      Upload de ZIP
+    </label>
+    <label>
+      <input 
+        type="radio" 
+        name="uploadMode" 
+        value="xmls" 
+        [(ngModel)]="uploadMode"
+        (ngModelChange)="onModeChange()">
+      Upload de XMLs
+    </label>
+  </div>
 
-     <button
-          (click)="onUpload()"
-          [disabled]="!selectedFile"
-          class="upload-button">
-          
-          @if (isUploading) {
-               <span>Processanod...</span>
-          } @else {
-               <span>Processar</span>
-          }
-     </button>
+  <label 
+    for="fileInput" 
+    class="file-label"
+    [class.disabled]="isUploading">
+    
+    @if (uploadMode === 'zip') {
+      <span>Escolher Ficheiro ZIP</span>
+    } @else {
+      <span>Escolher Ficheiros XML</span>
+    }
+  </label>
+  
+  <input 
+    type="file" 
+    id="fileInput"
+    (change)="onFileSelected($event)"
+    [accept]="uploadMode === 'zip' ? '.zip' : '.xml'"
+    [multiple]="uploadMode === 'xmls'"
+    [disabled]="isUploading" 
+  />
 
-     @if (uploadMessage) {
-          <span class="upload-message">{{ uploadMessage }}</span>
-     }
+  @if (selectedFiles && selectedFiles.length > 0) {
+    <span class="file-name">
+      @if (uploadMode === 'zip') {
+        {{ selectedFiles[0].name }} } @else {
+        {{ selectedFiles.length }} arquivos selecionados }
+    </span>
+  } @else {
+    <span class="file-name">Nenhum ficheiro selecionado</span>
+  }
 
+  <button 
+    (click)="onUpload()" 
+    [disabled]="!selectedFiles || selectedFiles.length === 0 || isUploading"
+    class="upload-button">
+    
+    @if (isUploading) {
+      <span>A processar...</span>
+    } @else {
+      <span>Processar</span>
+    }
+  </button>
+
+  @if (uploadMessage) {
+    <span class="upload-message">{{ uploadMessage }}</span>
+  }
 </div>

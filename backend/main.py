@@ -3,6 +3,8 @@ import io  # Para lidar com arquivos na memória
 import zipfile  # Para ler e escrever arquivos ZIP
 import xml.etree.ElementTree as ET  # Para analisar (parse) XML
 
+from typing import List
+
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import StreamingResponse  # Para devolver um arquivo para download
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,7 +35,7 @@ app.add_middleware(
 
 
 
-
+# ==== ENDPOINT PARA PASTA .ZIP ====
 @app.post("/processar-zip/")
 async def processar_zip(arquivo: UploadFile = File(...)):
     """
@@ -150,6 +152,101 @@ async def processar_zip(arquivo: UploadFile = File(...)):
             "Content-Disposition": "attachment; filename=xmls_processados.zip"
         } # Diz ao navegador para fazer download com este nome
     )
+
+
+# === ENDPOINT PARA VÁRIOS XMLS ===
+@app.post("/processar-xmls/")
+async def processar_xmls(arquivos: List[UploadFile] = File(...)):
+    """
+    Este endpoint recebe UMA LISTA de ficheiros XML, processa-os
+    e devolve um ZIP com o resultado.
+    """
+    # As listas são as mesmas
+    aprovados = []
+    rejeitados = []
+    contingencia = []
+
+    # --- Etapa 1: Ler a LISTA de ficheiros ---
+    # Em vez de ler um ZIP, iteramos a lista de 'UploadFile'
+    
+    for arquivo in arquivos:
+        
+        # Garante que estamos a processar apenas arquivos XML
+        if arquivo.filename and arquivo.filename.endswith('.xml'):
+            # Lê o conteúdo do XML
+            conteudo_xml = await arquivo.read()
+            nome_arquivo = arquivo.filename # Guardamos o nome
+            
+            # --- Etapa 2: Validar o XML (Lógica IDÊNTICA) ---
+            # (Esta lógica é copiada exatamente do 'processar_zip')
+            try:
+                # Analisa o conteúdo XML
+                root = ET.fromstring(conteudo_xml)
+                
+                # --- VALIDAÇÃO 1: Encontrar o cStat ---
+                cstat_node = None
+                for node in root.iter():
+                    if node.tag.endswith('cStat'):
+                        cstat_node = node
+                        break
+                cstat_value = cstat_node.text if cstat_node is not None else None
+
+                # --- APLICAÇÃO DAS REGRAS ---
+                
+                # REGRA 1: REJEITADOS
+                if cstat_value not in ['100', '150']:
+                    rejeitados.append((nome_arquivo, conteudo_xml))
+                
+                # Se o cStat for 100 ou 150...
+                else:
+                    # --- VALIDAÇÃO 2: Encontrar o tpEmis ---
+                    tpemis_node = None
+                    for node in root.iter():
+                        if node.tag.endswith('tpEmis'):
+                            tpemis_node = node
+                            break
+                    tpemis_value = tpemis_node.text if tpemis_node is not None else None
+
+                    # REGRA 2: APROVADOS (Normais)
+                    if tpemis_value == '1':
+                        aprovados.append((nome_arquivo, conteudo_xml))
+                    
+                    # REGRA 3: CONTINGÊNCIA
+                    else:
+                        contingencia.append((nome_arquivo, conteudo_xml))
+
+            except ET.ParseError:
+                # Se o XML estiver corrompido ou for inválido
+                print(f"Erro ao analisar o XML: {nome_arquivo}")
+                rejeitados.append((nome_arquivo, conteudo_xml))
+
+
+    # --- Etapa 3: Criar o novo ZIP de resposta (IDÊNTICA) ---
+    
+    memoria_zip_saida = io.BytesIO()
+    with zipfile.ZipFile(memoria_zip_saida, 'w', zipfile.ZIP_DEFLATED) as zip_out:
+        
+        for nome_arquivo, conteudo in aprovados:
+            zip_out.writestr(f'aprovados/{nome_arquivo}', conteudo)
+            
+        for nome_arquivo, conteudo in contingencia:
+            zip_out.writestr(f'contingencia/{nome_arquivo}', conteudo)
+            
+        for nome_arquivo, conteudo in rejeitados:
+            zip_out.writestr(f'rejeitados/{nome_arquivo}', conteudo)
+
+    memoria_zip_saida.seek(0)
+
+    # --- Etapa 4: Devolver o novo ZIP para o usuário (IDÊNTICA) ---
+    
+    return StreamingResponse(
+        memoria_zip_saida,
+        media_type="application/x-zip-compressed",
+        headers={
+            "Content-Disposition": "attachment; filename=xmls_processados.zip"
+        }
+    )
+
 
 
 # Bloco para correr o servidor

@@ -1,45 +1,51 @@
+// src/app/services/file-upload.service.ts
+
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpRequest } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 @Injectable({
-  providedIn: 'root',
+  providedIn: 'root'
 })
 export class FileUploadService {
 
-  // O URL do nosso backend FastAPI
-  private apiUrl = 'http://127.0.0.1:8000/processar-zip/';
-
-  // 1. Intea o HttpClient no construtor
-  constructor(private http: HttpClient) {}
-
-    /**
-   * Função para enviar o ficheiro ZIP para o backend
-   * @param file O ficheiro ZIP que o usuário selecionou
-   */
-
-  uploadZip(file: File): Observable<any> {
-
-      // 2. Usamos FormData para empacotar o ficheiro.
-      // O backend (FastAPI) espera por um 'multipart/form-data'.
-      const formData: FormData = new FormData();
-      
-      // A 'key' ('arquivo') deve ser EXATAMENTE a mesma
-      // que o FastAPI espera no 'main.py':
-      // async def processar_zip(arquivo: UploadFile = File(...)):
-      formData.append('arquivo', file, file.name);
-
-      // 3. Fazemos o pedido POST
-      return this.http.post(this.apiUrl, formData, {
-        // 4. Dizemos ao Angular para esperar um 'blob' como resposta
-        // Um 'blob' é um "objeto binário", que é o nosso ficheiro ZIP de resposta.
-        // Se não fizermos isto, ele vai tentar ler o ZIP como JSON e dar erro.
-        responseType: 'blob' 
-      });
-
-  } 
-
-
-
+  // Endpoint 1 (o antigo)
+  private zipApiUrl = 'http://127.0.0.1:8000/processar-zip/';
   
+  // Endpoint 2 (O NOVO)
+  private xmlApiUrl = 'http://127.0.0.1:8000/processar-xmls/';
+
+  constructor(private http: HttpClient) { }
+
+  /**
+   * Função para enviar UM ficheiro ZIP
+   */
+  uploadZip(file: File): Observable<any> {
+    const formData: FormData = new FormData();
+    // A key é 'arquivo' (singular)
+    formData.append('arquivo', file, file.name);
+
+    return this.http.post(this.zipApiUrl, formData, {
+      responseType: 'blob' 
+    });
+  }
+
+  /**
+   * NOVA FUNÇÃO: Enviar MÚLTIPLOS ficheiros XML
+   */
+  uploadXmls(files: FileList): Observable<any> {
+    const formData: FormData = new FormData();
+
+    // O backend (FastAPI) espera uma lista de 'arquivos'
+    // Temos de iterar a FileList e adicionar cada ficheiro
+    // ao FormData com a *mesma key* ('arquivos').
+    for (let i = 0; i < files.length; i++) {
+      formData.append('arquivos', files[i], files[i].name);
+    }
+
+    // Chamamos o novo endpoint
+    return this.http.post(this.xmlApiUrl, formData, {
+      responseType: 'blob'
+    });
+  }
 }

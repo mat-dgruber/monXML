@@ -1,18 +1,21 @@
 import { Component } from '@angular/core';
 import { FileUploadService } from '../../services/file-upload';
+import { FormsModule } from '@angular/forms';
 
 
 @Component({
   selector: 'app-file-upload',
   standalone: true,
-  imports: [],
+  imports: [FormsModule],
   templateUrl: './file-upload.html',
   styleUrl: './file-upload.css',
 })
 export class FileUpload {
 
-  // 1. Variavel para guardar o ficheiro selecionado
-  selectedFile: File | null = null;
+  // A nossa variável de estado principal
+  uploadMode: "zip" | "xmls" = "zip" // Começa em modo ZIP
+  // Variavel para guardar o ficheiro selecionado
+  selectedFiles: FileList | null = null;
   isUploading: boolean = false; // Feedback visual
   uploadMessage: string = ''; // Para mensagem de erro ou sucesso
  
@@ -27,11 +30,10 @@ export class FileUpload {
     const fileList: FileList = event.target.files;
 
     if (fileList.length > 0) {
-      this.selectedFile = fileList[0];
+      this.selectedFiles = fileList;
       this.uploadMessage = '';
     } else {
-      this.selectedFile = null;
-      this.uploadMessage = '';
+      this.selectedFiles = null;
     }
    }
 
@@ -39,21 +41,37 @@ export class FileUpload {
     * Esta função é chamada QUANDO o usuário clica no botão "Processar".
     */
    onUpload(): void {
-    if (this.selectedFile && !this.isUploading) {
-      
+    if (this.selectedFiles && this.selectedFiles.length > 0 && !this.isUploading) {      
       this.isUploading = true
       this.uploadMessage = "Processando..."
 
+      if (this.uploadMode === 'zip') {
+        
+        // --- MODO ZIP ---
+        const zipFile = this.selectedFiles[0]; // Apanha o primeiro (e único) ficheiro
+        this.fileUploadService.uploadZip(zipFile).subscribe(this.handleResponse());
+        
+      } else {
+        
+        // --- MODO XMLs ---
+        this.fileUploadService.uploadXmls(this.selectedFiles).subscribe(this.handleResponse());
+      }
+      
+    } else {
+      console.warn('Nenhum ficheiro selecionado ou upload já em progresso.');
+    }
+  }
 
-      //chamando o serviço
-      this.fileUploadService.uploadZip(this.selectedFile).subscribe({
-
-        // Sucesso: backend devolveu um BLOB (o ZIP)
-        next: (blobResponse) => {
-          console.log("Backend respondeu com sucesso.")
-          this.isUploading = false
-          this.uploadMessage = "Processamento concluido! Iniciando download..."
-
+  /**
+   * 7. (Refatoração) Criei um "manipulador" de resposta 
+   * para evitar repetir código (DRY - Don't Repeat Yourself)
+   */
+  private handleResponse() {
+    return {
+      // SUCESSO
+      next: (blobResponse: any) => {
+        this.isUploading = false;
+        this.uploadMessage = 'Processamento concluído! A iniciar download.';
           // o DOWNLOAD
 
           //cria uma url temporaria na memoria do navegador para o ficheiro
@@ -78,17 +96,20 @@ export class FileUpload {
         },
 
         // ERRO: erro no backend
-        error: (err) => {
+        error: (err: any) => {
           console.error("Erro no backend:", err);
           this.isUploading = false
           this.uploadMessage = "Erro ao processar ficheiro. Tente novamente."
         }
-
-      })
-
-    } else {
-      console.warn("Nenhum ficheiro selecionado para o upload")
-    }
+        
+      };
    }
 
+  /**
+   * 8. Função para limpar os ficheiros quando o modo muda
+   */
+  onModeChange(): void {
+    this.selectedFiles = null;
+    this.uploadMessage = '';
+  }
 }
