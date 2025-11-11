@@ -1,1 +1,37 @@
-<p>file-upload works!</p>
+<div class="upload-container">
+     <label for="fileInput" class="file-label">
+          Envie uma pasta de XMLs em .ZIP
+     </label>
+
+     <input
+          type="file"
+          id="fileInput"
+          (change)="onFileSelected($event)"
+          accept=".zip"
+          class="file-input"
+          [disabled]="isUploading"
+     />
+     
+     @if (selectedFile) {
+          <span class="file-name"> {{ selectedFile.name }}</span>
+     } @else {
+          <span class="file-name"> Nenhum arquivo selecionado </span>
+     }
+
+     <button
+          (click)="onUpload()"
+          [disabled]="!selectedFile"
+          class="upload-button">
+          
+          @if (isUploading) {
+               <span>Processanod...</span>
+          } @else {
+               <span>Processar</span>
+          }
+     </button>
+
+     @if (uploadMessage) {
+          <span class="upload-message">{{ uploadMessage }}</span>
+     }
+
+</div>

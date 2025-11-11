@@ -2,14 +2,37 @@ import uvicorn
 import io  # Para lidar com arquivos na memória
 import zipfile  # Para ler e escrever arquivos ZIP
 import xml.etree.ElementTree as ET  # Para analisar (parse) XML
+
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import StreamingResponse  # Para devolver um arquivo para download
+from fastapi.middleware.cors import CORSMiddleware
+
+
 
 # 1. Inicia a aplicação FastAPI
 app = FastAPI(
     title="Processador de XML",
     description="API para validar cStat de XMLs e separá-los."
 )
+
+
+# Define as origens permitidas
+origins = [
+     "http://localhost:4200"
+]
+
+# Adiciona o middleware CORS
+# Isto diz ao FastAPI: "Permite ligações que venham de 'origins'"
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,         # Quais domínios podem ligar-se
+    allow_credentials=True,        # Permite cookies (não usamos, mas é boa prática)
+    allow_methods=["*"],           # Permite todos os métodos (GET, POST, etc.)
+    allow_headers=["*"],           # Permite todos os cabeçalhos
+)
+
+
+
 
 @app.post("/processar-zip/")
 async def processar_zip(arquivo: UploadFile = File(...)):
@@ -108,7 +131,7 @@ async def processar_zip(arquivo: UploadFile = File(...)):
         # Adiciona os arquivos em contingência 
         for nome_arquivo, conteudo in contingencia:
             zip_out.writestr(f'contingencia/{nome_arquivo}', conteudo)
-            
+
             
         # Adiciona os arquivos rejeitados
         for nome_arquivo, conteudo in rejeitados:
