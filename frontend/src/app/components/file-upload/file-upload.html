@@ -1,7 +1,8 @@
 <div class="rounded-3xl p-8 max-w-2xl mx-auto bg-neutral border border-primary">
 
   <div class="flex justify-center mb-6">
-    <div class="rounded-full p-1 flex bg-neutral-200"> <label class="relative inline-flex items-center cursor-pointer">
+    <div class="rounded-full p-1 flex bg-neutral-200 border-2 border-primary-dark shadow-lg"> 
+      <label class="relative inline-flex items-center cursor-pointer">
         <input 
           type="radio" 
           name="uploadMode" 
@@ -10,7 +11,7 @@
           [(ngModel)]="uploadMode"
           (ngModelChange)="onModeChange()">
         <span 
-          class="px-4 py-2 rounded-full transition-colors duration-300"
+          class="px-4 py-2 rounded-full transition-colors duration-300 shadow-sm"
           [class.bg-primary]="uploadMode === 'zip'"
           [class.text-green-50]="uploadMode === 'zip'"
           [class.bg-transparent]="uploadMode !== 'zip'"
@@ -27,7 +28,7 @@
           [(ngModel)]="uploadMode"
           (ngModelChange)="onModeChange()">
         <span 
-          class="px-4 py-2 rounded-full transition-colors duration-300"
+          class="px-4 py-2 rounded-full transition-colors duration-300 shadow-sm"
           [class.bg-primary]="uploadMode === 'xmls'"
           [class.text-green-50]="uploadMode === 'xmls'"
           [class.bg-transparent]="uploadMode !== 'xmls'"
@@ -41,7 +42,7 @@
   <div class="flex flex-col items-center">
     <label 
       for="fileInput" 
-      class="text-green-50 font-bold py-3 px-6 rounded-full cursor-pointer transition-transform duration-300 transform hover:scale-105 bg-primary"
+      class="text-green-50 font-bold shadow-md py-3 px-6 rounded-full cursor-pointer transition-transform duration-300 transform hover:scale-105 bg-primary"
       [class.cursor-not-allowed]="isUploading">
       
       @if (uploadMode === 'zip') {
@@ -80,7 +81,7 @@
     <button 
       (click)="onUpload()" 
       [disabled]="!selectedFiles || selectedFiles.length === 0 || isUploading"
-      class="bg-primary text-green-50 font-bold py-3 px-12 rounded-full transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+      class="bg-primary text-green-50 font-bold shadow-md py-3 px-12 rounded-full transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
       
       <span>Processar</span>
     </button>
