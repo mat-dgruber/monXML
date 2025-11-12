@@ -22,7 +22,7 @@ app = FastAPI(
 # Define as origens permitidas
 origins = [
     "http://localhost:4200",
-    "http://10.93.15:4200",
+    "http://10.93.15.125:4200",
     "http://127.0.0.1:4200"
 ]
 
