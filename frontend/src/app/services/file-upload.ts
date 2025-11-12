@@ -10,10 +10,10 @@ import { Observable } from 'rxjs';
 export class FileUploadService {
 
   // Endpoint 1 (o antigo)
-  private zipApiUrl = 'http://127.0.0.1:8000/processar-zip/';
+  private zipApiUrl = 'http://10.93.15.125:8000/processar-zip/';
   
   // Endpoint 2 (O NOVO)
-  private xmlApiUrl = 'http://127.0.0.1:8000/processar-xmls/';
+  // private xmlApiUrl = 'http://127.0.0.1:8000/processar-xmls/';
 
   constructor(private http: HttpClient) { }
 

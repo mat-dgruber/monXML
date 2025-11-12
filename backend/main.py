@@ -246,4 +246,6 @@ def processar_xmls(arquivos: List[UploadFile] = File(...)):
 
 # Bloco para correr o servidor
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    # O 'host="0.0.0.0"' diz ao Uvicorn para aceitar ligações
+    # de qualquer IP na rede, não apenas de localhost.
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
