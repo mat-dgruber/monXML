@@ -1,7 +1,7 @@
 // src/app/services/file-upload.service.ts
 
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders, HttpRequest } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpRequest, HttpEventType, HttpEvent } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 @Injectable({
@@ -20,14 +20,16 @@ export class FileUploadService {
   /**
    * Função para enviar UM ficheiro ZIP
    */
-  uploadZip(file: File): Observable<any> {
+  uploadZip(file: File): Observable<HttpEvent<Blob>> {
     const formData: FormData = new FormData();
     // A key é 'arquivo' (singular)
     formData.append('arquivo', file, file.name);
 
     console.log('Uploading ZIP to:', this.zipApiUrl);
     return this.http.post(this.zipApiUrl, formData, {
-      responseType: 'blob' 
+      reportProgress: true,     // <-- Pedir progresso (Upload E Download)
+      observe: 'events',        // <-- Ouvir todos os eventos, não só a resposta final
+      responseType: 'blob'      // <-- A resposta final ainda é um blob
     });
   }
 

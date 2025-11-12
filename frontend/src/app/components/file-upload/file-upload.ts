@@ -3,6 +3,8 @@
 import { Component, inject } from '@angular/core';
 import { FileUploadService } from '../../services/file-upload';
 import { FormsModule } from '@angular/forms';
+import { HttpEventType } from '@angular/common/http';
+
 
 // 1. Importar o JSZip
 import JSZip from 'jszip'; 
@@ -41,70 +43,78 @@ export class FileUpload {
       this.isUploading = true;
       this.uploadMessage = 'A processar...';
 
-      if (this.uploadMode === 'zip' && this.selectedFiles instanceof FileList) {
-        
-        // --- MODO ZIP (Continua igual) ---
+      const fileToSend = this.selectedFiles[0];
+      
+
+      // --- MODO ZIP ---
+      if (this.uploadMode === 'zip') {
         const zipFile = this.selectedFiles[0];
-        this.fileUploadService.uploadZip(zipFile).subscribe(this.handleResponse());
-        
+        this.subscribeToUpload(this.fileUploadService.uploadZip(zipFile));
+      
+      // --- MODO XMLS (Com JSZip) ---
       } else {
-        
-        // --- MODO XMLS (A NOVA LÓGICA) ---
-        this.uploadMessage = 'A comprimir ficheiros no navegador...';
-        
-        // 2. Criar um novo ZIP na memória
+        this.uploadMessage = 'A comprimir ficheiros...';
         const zip = new JSZip();
         for (let i = 0; i < this.selectedFiles.length; i++) {
-          const file = this.selectedFiles[i];
-          // 3. Adicionar cada XML ao ZIP
-          zip.file(file.name, file); 
+          zip.file(this.selectedFiles[i].name, this.selectedFiles[i]);
         }
-
-        // 4. Gerar o ZIP como um 'blob' (binário)
-        zip.generateAsync({ type: 'blob' })
-          .then((zipBlob: Blob) => {
-            
-            this.uploadMessage = 'A enviar pacote...';
-            
-            // 5. Criar um "File" virtual para o nosso serviço
-            const zipFile = new File([zipBlob], "xmls_do_navegador.zip", {
-              type: "application/zip",
-            });
-
-            // 6. ENVIAR PARA O ENDPOINT DE ZIP!
-            this.fileUploadService.uploadZip(zipFile).subscribe(this.handleResponse());
-
-          })
-          .catch((err: any) => {
-            this.isUploading = false;
-            this.uploadMessage = 'Erro ao criar o ZIP no navegador.';
-            console.error(err);
-          });
+        zip.generateAsync({ type: 'blob' }).then((zipBlob) => {
+          const zipFile = new File([zipBlob], "xmls_do_navegador.zip", { type: "application/zip" });
+          this.uploadMessage = 'A enviar pacote...';
+          this.subscribeToUpload(this.fileUploadService.uploadZip(zipFile));
+        });
       }
     }
   }
 
-  // O nosso 'handleResponse' (sem alterações)
-  private handleResponse() {
-    return {
-      next: (blobResponse: any) => {
-        this.isUploading = false;
-        this.uploadMessage = 'Processamento concluído! A iniciar download.';
-        const url = window.URL.createObjectURL(blobResponse);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'xmls_processados.zip';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
+  // 2. CRIAMOS UMA FUNÇÃO SEPARADA PARA O SUBSCRIBE
+  private subscribeToUpload(uploadObservable: any) {
+    
+    uploadObservable.subscribe({
+      
+      // 'next' agora é chamado VÁRIAS VEZES
+      next: (event: any) => {
+        
+        // Evento 1: Progresso do UPLOAD
+        if (event.type === HttpEventType.UploadProgress) {
+          const progress = Math.round(100 * event.loaded / event.total);
+          this.uploadMessage = `A enviar... ${progress}%`;
+        
+        // Evento 2: O servidor respondeu (mas o download AINDA NÃO COMEÇOU)
+        } else if (event.type === HttpEventType.ResponseHeader) {
+          this.uploadMessage = 'Servidor respondeu. A processar...';
+          // É aqui que os teus 3.17s estão a decorrer
+        
+        // Evento 3: Progresso do DOWNLOAD
+        } else if (event.type === HttpEventType.DownloadProgress) {
+          const progress = Math.round(100 * event.loaded / event.total);
+          this.uploadMessage = `A baixar resultado... ${progress}%`;
+        
+        // Evento 4: DOWNLOAD CONCLUÍDO!
+        } else if (event.type === HttpEventType.Response) {
+          this.uploadMessage = 'Download concluído!';
+          this.isUploading = false;
+          
+          // A lógica de download (agora 'event.body' em vez de 'blobResponse')
+          const blobResponse = event.body;
+          const url = window.URL.createObjectURL(blobResponse);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'xmls_processados.zip';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+        }
       },
+      
+      // ERRO
       error: (err: any) => {
         console.error('Erro no upload:', err);
         this.isUploading = false;
-        this.uploadMessage = 'Erro ao processar o ficheiro. Tente novamente.';
+        this.uploadMessage = 'Erro ao processar o ficheiro.';
       }
-    };
+    });
   }
 
   onModeChange(): void {

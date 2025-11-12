@@ -1,157 +1,150 @@
 import uvicorn
-import io  # Para lidar com arquivos na memória
-import zipfile  # Para ler e escrever arquivos ZIP
-import xml.etree.ElementTree as ET  # Para analisar (parse) XML
+import io
+import zipfile
+import time
 
+from lxml import etree as ET
 from typing import List
 
-from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import StreamingResponse  # Para devolver um arquivo para download
+
+from fastapi import FastAPI, File, UploadFile, Response
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+# 1. IMPORTAR O RUN_IN_THREADPOOL
+from starlette.concurrency import run_in_threadpool 
 
-
-
-# 1. Inicia a aplicação FastAPI
+# Inicia a aplicação FastAPI
 app = FastAPI(
     title="Processador de XML",
     description="API para validar cStat de XMLs e separá-los."
 )
 
-
 # Define as origens permitidas
 origins = [
-     "http://localhost:4200"
+    "http://localhost:4200"
 ]
 
 # Adiciona o middleware CORS
-# Isto diz ao FastAPI: "Permite ligações que venham de 'origins'"
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,         # Quais domínios podem ligar-se
-    allow_credentials=True,        # Permite cookies (não usamos, mas é boa prática)
-    allow_methods=["*"],           # Permite todos os métodos (GET, POST, etc.)
-    allow_headers=["*"],           # Permite todos os cabeçalhos
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
-
-# ==== ENDPOINT PARA PASTA .ZIP ====
-@app.post("/processar-zip/")
-def processar_zip(arquivo: UploadFile = File(...)):
+# -------------------------------------------------------------------
+# 2. TODA A LÓGICA PESADA (SÍNCRONA) VAI PARA A SUA PRÓPRIA FUNÇÃO
+# -------------------------------------------------------------------
+def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
     """
-    Este endpoint recebe UM arquivo ZIP, processa-o (ainda por implementar)
-    e devolve o resultado.
+    Esta é uma função síncrona (bloqueante) que faz todo
+    o trabalho pesado. O FastAPI vai executá-la numa thread pool.
     """
     
-    # Listas para guardar os arquivos processados
-    # Vamos guardar (nome_do_arquivo, conteudo_do_arquivo)
-    aprovados = []
-    rejeitados = []
-    contingencia = []
-
-    # Lê o conteúdo do arquivo ZIP que o usuário enviou
-    conteudo_zip_recebido = arquivo.read()
-
-    # --- Etapa 1: Ler o ZIP recebido ---
-    
-    # Abre o ZIP na memória (usando io.BytesIO)
-    with zipfile.ZipFile(io.BytesIO(conteudo_zip_recebido), 'r') as zip_in:
-        
-        # Itera por cada arquivo dentro do ZIP
-        for nome_arquivo in zip_in.namelist():
-            
-            # Garante que estamos a processar apenas arquivos XML
-            if nome_arquivo.endswith('.xml'):
-                # Lê o conteúdo do XML
-                conteudo_xml = zip_in.read(nome_arquivo)
-                
-                # --- Etapa 2: Validar o cStat do XML ---
-                try:
-                    # Analisa o conteúdo XML
-                    root = ET.fromstring(conteudo_xml)
-                    
-                    # --- VALIDAÇÃO 1: Encontrar o cStat ---
-                    # (Como explicaste, ele fica dentro do <prot...> -> <infProt>)
-                    cstat_node = None
-                    for node in root.iter():
-                        if node.tag.endswith('cStat'):
-                            cstat_node = node
-                            break # Encontrámos o que queríamos
-                        
-                    cstat_value = cstat_node.text if cstat_node is not None else None
-
-                    # --- APLICAÇÃO DAS REGRAS ---
-                    
-                    # REGRA 1: REJEITADOS
-                    # Se cStat não for 100 (Autorizado) ou 150 (Autorizado fora de prazo - comum em NFC-e)
-
-                    if cstat_value not in ['100', '150']:
-                        rejeitados.append((nome_arquivo, conteudo_xml))
-
-                    # Se o cStat for 100 ou 150, verificamos a contingência
-                    else:
-                        # --- VALIDAÇÃO 2: Encontrar o tpEmis ---
-                        # (Como explicaste, ele fica dentro do <NFe/NFCe> -> <infNFe> -> <ide>)
-                        tpemis_node = None
-                        for node in root.iter():
-                            if node.tag.endswith('tpEmis'):
-                                tpemis_node = node
-                                break # Encontramos
-                            
-                    tpemis_value = tpemis_node.text if tpemis_node is not None else None
-
-                    # REGRA 2: APROVADOS (Normais)
-                    if tpemis_value == '1':
-                        aprovados.append((nome_arquivo, conteudo_xml))
-
-                    # REGRA 3: CONTINGÊNCIA 
-                    # Se tpEmis for '9', '6', '7', etc. (qualuqer coisa != '1')
-                    else: 
-                        contingencia.append((nome_arquivo, conteudo_xml))
-                        
-                    
-                except ET.ParseError:
-                    # Se o XML estiver corrompido ou for inválido
-                    print(f"Erro ao analisar o XML: {nome_arquivo}")
-                    rejeitados.append((nome_arquivo, conteudo_xml))
-
-
-    # --- Etapa 3: Criar o novo ZIP de resposta ---
-    
-    # Cria um "arquivo" em memória para o novo ZIP
+    # Criamos o ZIP de saída
     memoria_zip_saida = io.BytesIO()
 
-    # Abre o "arquivo" em modo de escrita ('w')
+    # Abrimos o ZIP de saída
     with zipfile.ZipFile(memoria_zip_saida, 'w', zipfile.ZIP_DEFLATED) as zip_out:
         
-        # Adiciona os arquivos aprovados
-        for nome_arquivo, conteudo in aprovados:
-            # Escreve o arquivo dentro da pasta 'aprovados/'
-            zip_out.writestr(f'aprovados/{nome_arquivo}', conteudo)
-            
-     
-        # Adiciona os arquivos em contingência 
-        for nome_arquivo, conteudo in contingencia:
-            zip_out.writestr(f'contingencia/{nome_arquivo}', conteudo)
+        # Abrimos o ZIP de entrada
+        try:
+            with zipfile.ZipFile(io.BytesIO(conteudo_zip_recebido), 'r') as zip_in:
+                
+                # Itera por cada arquivo dentro do ZIP
+                for nome_arquivo in zip_in.namelist():
+                    
+                    if not nome_arquivo.endswith('.xml'):
+                        continue # Pula ficheiros que não são XML
 
-            
-        # Adiciona os arquivos rejeitados
-        for nome_arquivo, conteudo in rejeitados:
-            # Escreve o arquivo dentro da pasta 'rejeitados/'
-            zip_out.writestr(f'rejeitados/{nome_arquivo}', conteudo)
+                    # Lê o conteúdo do XML
+                    conteudo_xml = zip_in.read(nome_arquivo)
+                    
+                    # --- Etapa 2: Validar o cStat do XML ---
+                    try:
+                        root = ET.fromstring(conteudo_xml)
+                        
+                        # --- VALIDAÇÃO 1: Encontrar o cStat ---
+                        cstat_node = None
+                        for node in root.iter():
+                            if node.tag.endswith('cStat'):
+                                cstat_node = node
+                                break
+                        
+                        cstat_value = cstat_node.text if cstat_node is not None else None
 
-    # "Rebobina" o arquivo de memória para o início, para que a resposta o possa ler
+                        # --- APLICAÇÃO DAS REGRAS ---
+                        if cstat_value not in ['100', '150']:
+                            zip_out.writestr(f'rejeitados/{nome_arquivo}', conteudo_xml)
+                        
+                        else:
+                            # --- VALIDAÇÃO 2: Encontrar o tpEmis ---
+                            tpemis_node = None
+                            for node in root.iter():
+                                if node.tag.endswith('tpEmis'):
+                                    tpemis_node = node
+                                    break
+                            
+                            tpemis_value = tpemis_node.text if tpemis_node is not None else None
+
+                            if tpemis_value == '1':
+                                zip_out.writestr(f'aprovados/{nome_arquivo}', conteudo_xml)
+                            else: 
+                                zip_out.writestr(f'contingencia/{nome_arquivo}', conteudo_xml)
+                        
+                    except ET.ParseError:
+                        print(f"Erro ao analisar o XML: {nome_arquivo}")
+                        zip_out.writestr(f'rejeitados/{nome_arquivo}', conteudo_xml)
+                        
+        except zipfile.BadZipFile:
+            # O ficheiro enviado não era um ZIP válido
+            print("Erro: Ficheiro não é um ZIP válido.")
+            # Escrevemos um ficheiro de erro no zip de saída
+            zip_out.writestr('ERRO.txt', 'O ficheiro enviado não era um ZIP válido.')
+
+    # "Rebobina" o arquivo de memória
     memoria_zip_saida.seek(0)
-
-    # --- Etapa 4: Devolver o novo ZIP para o usuário ---
     
-    return StreamingResponse(
-        memoria_zip_saida, # O conteúdo do nosso ZIP em memória
-        media_type="application/x-zip-compressed", # O tipo de arquivo
+    return memoria_zip_saida
+
+
+# -------------------------------------------------------------------
+# 3. O ENDPOINT VOLTA A SER 'ASYNC'
+# -------------------------------------------------------------------
+@app.post("/processar-zip/")
+async def processar_zip(arquivo: UploadFile = File(...)):
+    """
+    Este endpoint ASÍNCRONO apenas recebe o ficheiro
+    e delega o trabalho pesado para a thread pool.
+    """
+    
+    start_time = time.perf_counter()
+
+    # 4. Lemos o ficheiro de forma assíncrona (correto)
+    conteudo_zip_recebido = await arquivo.read()
+
+    # 5. Executamos a função síncrona (pesada) na thread pool
+    #    Isto evita que o servidor bloqueie.
+    memoria_zip_saida = await run_in_threadpool(processar_zip_sync, conteudo_zip_recebido)
+    
+    end_time = time.perf_counter()
+    duration = end_time - start_time
+
+    print(f"Processamento do ficheiro '{arquivo.filename}' concluído em {duration:.2f} segundos.")
+
+
+    # --- Devolver o novo ZIP para o usuário ---
+    return Response(
+        content=memoria_zip_saida.getvalue(), # <-- .getvalue() obtém os bytes do BytesIO
+        media_type="application/x-zip-compressed",
         headers={
             "Content-Disposition": "attachment; filename=xmls_processados.zip"
-        } # Diz ao navegador para fazer download com este nome
+        }
     )
+
+
 
 """""
 # === ENDPOINT PARA VÁRIOS XMLS ===
