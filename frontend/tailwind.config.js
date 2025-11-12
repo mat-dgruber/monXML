@@ -8,7 +8,7 @@ export default {
         'primary-light': '#c4c7b6',
         'primary-dark': '#1d361f',
         'neutral': '#c4c7b6',
-        'accent': '#dfc8b6',
+        'accent': '#c08332',
         'background': '#1d361f',
         'text': '#e5e5df',
       },

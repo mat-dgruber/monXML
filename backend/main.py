@@ -157,10 +157,10 @@ async def processar_zip(arquivo: UploadFile = File(...)):
 # === ENDPOINT PARA VÁRIOS XMLS ===
 @app.post("/processar-xmls/")
 async def processar_xmls(arquivos: List[UploadFile] = File(...)):
-    """
+    ""
     Este endpoint recebe UMA LISTA de ficheiros XML, processa-os
     e devolve um ZIP com o resultado.
-    """
+    ""
     # As listas são as mesmas
     aprovados = []
     rejeitados = []
