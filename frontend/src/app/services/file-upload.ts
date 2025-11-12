@@ -25,6 +25,7 @@ export class FileUploadService {
     // A key é 'arquivo' (singular)
     formData.append('arquivo', file, file.name);
 
+    console.log('Uploading ZIP to:', this.zipApiUrl);
     return this.http.post(this.zipApiUrl, formData, {
       responseType: 'blob' 
     });
@@ -32,7 +33,7 @@ export class FileUploadService {
 
   /**
    * NOVA FUNÇÃO: Enviar MÚLTIPLOS ficheiros XML
-   */
+   
   uploadXmls(files: FileList): Observable<any> {
     const formData: FormData = new FormData();
 
@@ -48,4 +49,5 @@ export class FileUploadService {
       responseType: 'blob'
     });
   }
+    */
 }

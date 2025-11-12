@@ -1,113 +1,112 @@
-import { Component } from '@angular/core';
-import { FileUploadService } from '../../services/file-upload';
-import { FormsModule } from '@angular/forms';
+// src/app/components/file-upload/file-upload.component.ts
 
+import { Component, inject } from '@angular/core';
+import { FileUploadService } from '../../services/file-upload.service.ts';
+import { FormsModule } from '@angular/forms'; 
+
+// 1. Importar o JSZip
+import JSZip from 'jszip'; 
 
 @Component({
   selector: 'app-file-upload',
   standalone: true,
   imports: [FormsModule],
   templateUrl: './file-upload.html',
-  styleUrl: './file-upload.css',
+  styleUrl: './file-upload.css'
 })
 export class FileUpload {
 
-  // A nossa variável de estado principal
-  uploadMode: "zip" | "xmls" = "zip" // Começa em modo ZIP
-  // Variavel para guardar o ficheiro selecionado
+  uploadMode: 'zip' | 'xmls' = 'zip';
   selectedFiles: FileList | null = null;
-  isUploading: boolean = false; // Feedback visual
-  uploadMessage: string = ''; // Para mensagem de erro ou sucesso
- 
-  // Injetando o serviço no construtor
-  constructor(private fileUploadService: FileUploadService) { }
+  isUploading: boolean = false;
+  uploadMessage: string = '';
 
-    /**
-    * Esta função é chamada QUANDO o usuário seleciona um ficheiro
-    * no <input type="file">.
-    */
-   onFileSelected(event: any): void {
+  private fileUploadService = inject(FileUploadService);
+
+  onFileSelected(event: any): void {
     const fileList: FileList = event.target.files;
-
+    
     if (fileList.length > 0) {
       this.selectedFiles = fileList;
-      this.uploadMessage = '';
+      this.uploadMessage = ''; 
     } else {
       this.selectedFiles = null;
     }
-   }
+  }
 
-    /**
-    * Esta função é chamada QUANDO o usuário clica no botão "Processar".
-    */
-   onUpload(): void {
-    if (this.selectedFiles && this.selectedFiles.length > 0 && !this.isUploading) {      
-      this.isUploading = true
-      this.uploadMessage = "Processando..."
+  // A LÓGICA PRINCIPAL VAI MUDAR AQUI
+  onUpload(): void {
+    if (this.selectedFiles && this.selectedFiles.length > 0 && !this.isUploading) {
+      
+      this.isUploading = true;
+      this.uploadMessage = 'A processar...';
 
-      if (this.uploadMode === 'zip') {
+      if (this.uploadMode === 'zip' && this.selectedFiles instanceof FileList) {
         
-        // --- MODO ZIP ---
-        const zipFile = this.selectedFiles[0]; // Apanha o primeiro (e único) ficheiro
+        // --- MODO ZIP (Continua igual) ---
+        const zipFile = this.selectedFiles[0];
         this.fileUploadService.uploadZip(zipFile).subscribe(this.handleResponse());
         
       } else {
         
-        // --- MODO XMLs ---
-        this.fileUploadService.uploadXmls(this.selectedFiles).subscribe(this.handleResponse());
+        // --- MODO XMLS (A NOVA LÓGICA) ---
+        this.uploadMessage = 'A comprimir ficheiros no navegador...';
+        
+        // 2. Criar um novo ZIP na memória
+        const zip = new JSZip();
+        for (let i = 0; i < this.selectedFiles.length; i++) {
+          const file = this.selectedFiles[i];
+          // 3. Adicionar cada XML ao ZIP
+          zip.file(file.name, file); 
+        }
+
+        // 4. Gerar o ZIP como um 'blob' (binário)
+        zip.generateAsync({ type: 'blob' })
+          .then((zipBlob: Blob) => {
+            
+            this.uploadMessage = 'A enviar pacote...';
+            
+            // 5. Criar um "File" virtual para o nosso serviço
+            const zipFile = new File([zipBlob], "xmls_do_navegador.zip", {
+              type: "application/zip",
+            });
+
+            // 6. ENVIAR PARA O ENDPOINT DE ZIP!
+            this.fileUploadService.uploadZip(zipFile).subscribe(this.handleResponse());
+
+          })
+          .catch((err: any) => {
+            this.isUploading = false;
+            this.uploadMessage = 'Erro ao criar o ZIP no navegador.';
+            console.error(err);
+          });
       }
-      
-    } else {
-      console.warn('Nenhum ficheiro selecionado ou upload já em progresso.');
     }
   }
 
-  /**
-   * 7. (Refatoração) Criei um "manipulador" de resposta 
-   * para evitar repetir código (DRY - Don't Repeat Yourself)
-   */
+  // O nosso 'handleResponse' (sem alterações)
   private handleResponse() {
     return {
-      // SUCESSO
       next: (blobResponse: any) => {
         this.isUploading = false;
         this.uploadMessage = 'Processamento concluído! A iniciar download.';
-          // o DOWNLOAD
+        const url = window.URL.createObjectURL(blobResponse);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'xmls_processados.zip';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      },
+      error: (err: any) => {
+        console.error('Erro no upload:', err);
+        this.isUploading = false;
+        this.uploadMessage = 'Erro ao processar o ficheiro. Tente novamente.';
+      }
+    };
+  }
 
-          //cria uma url temporaria na memoria do navegador para o ficheiro
-          const url = window.URL.createObjectURL(blobResponse);
-          // Cria um elemente de link invisivel <a>
-          const link = document.createElement('a');
-          link.href = url;
-
-          // Nome do ficheiro
-          link.download = "xml_processadors.zip";
-
-          // adiciona o link ao corpo da pagina (necessaário no firefox)
-          document.body.appendChild(link);
-
-          // Simula um clique no link para inicar o download
-          link.click();
-
-          // Limpa o link e o url temporario
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(url);
-
-        },
-
-        // ERRO: erro no backend
-        error: (err: any) => {
-          console.error("Erro no backend:", err);
-          this.isUploading = false
-          this.uploadMessage = "Erro ao processar ficheiro. Tente novamente."
-        }
-        
-      };
-   }
-
-  /**
-   * 8. Função para limpar os ficheiros quando o modo muda
-   */
   onModeChange(): void {
     this.selectedFiles = null;
     this.uploadMessage = '';
