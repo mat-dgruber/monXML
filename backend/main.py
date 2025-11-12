@@ -153,7 +153,7 @@ async def processar_zip(arquivo: UploadFile = File(...)):
         } # Diz ao navegador para fazer download com este nome
     )
 
-
+"""""
 # === ENDPOINT PARA VÁRIOS XMLS ===
 @app.post("/processar-xmls/")
 async def processar_xmls(arquivos: List[UploadFile] = File(...)):
@@ -247,7 +247,7 @@ async def processar_xmls(arquivos: List[UploadFile] = File(...)):
         }
     )
 
-
+"""
 
 # Bloco para correr o servidor
 if __name__ == "__main__":

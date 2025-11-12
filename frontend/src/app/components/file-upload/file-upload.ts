@@ -1,8 +1,8 @@
 // src/app/components/file-upload/file-upload.component.ts
 
 import { Component, inject } from '@angular/core';
-import { FileUploadService } from '../../services/file-upload.service.ts';
-import { FormsModule } from '@angular/forms'; 
+import { FileUploadService } from '../../services/file-upload';
+import { FormsModule } from '@angular/forms';
 
 // 1. Importar o JSZip
 import JSZip from 'jszip'; 
