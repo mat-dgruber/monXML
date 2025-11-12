@@ -41,9 +41,7 @@
   <div class="flex flex-col items-center">
     <label 
       for="fileInput" 
-      class="text-white font-bold py-3 px-6 rounded-full cursor-pointer transition-transform duration-300 transform hover:scale-105"
-      [class.bg-primary]="!isUploading"
-      [class.bg-neutral]="isUploading"
+      class="text-green-50 font-bold py-3 px-6 rounded-full cursor-pointer transition-transform duration-300 transform hover:scale-105 bg-primary"
       [class.cursor-not-allowed]="isUploading">
       
       @if (uploadMode === 'zip') {
@@ -82,19 +80,9 @@
     <button 
       (click)="onUpload()" 
       [disabled]="!selectedFiles || selectedFiles.length === 0 || isUploading"
-      class="bg-primary text-primary-light font-bold py-3 px-12 rounded-full transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+      class="bg-primary text-green-50 font-bold py-3 px-12 rounded-full transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
       
-      @if (isUploading) {
-        <div class="flex items-center justify-center">
-          <svg class="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span>A processar...</span>
-        </div>
-      } @else {
-        <span>Processar</span>
-      }
+      <span>Processar</span>
     </button>
   </div>
 

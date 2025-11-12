@@ -37,7 +37,7 @@ app.add_middleware(
 
 # ==== ENDPOINT PARA PASTA .ZIP ====
 @app.post("/processar-zip/")
-async def processar_zip(arquivo: UploadFile = File(...)):
+def processar_zip(arquivo: UploadFile = File(...)):
     """
     Este endpoint recebe UM arquivo ZIP, processa-o (ainda por implementar)
     e devolve o resultado.
@@ -50,7 +50,7 @@ async def processar_zip(arquivo: UploadFile = File(...)):
     contingencia = []
 
     # Lê o conteúdo do arquivo ZIP que o usuário enviou
-    conteudo_zip_recebido = await arquivo.read()
+    conteudo_zip_recebido = arquivo.read()
 
     # --- Etapa 1: Ler o ZIP recebido ---
     
@@ -78,14 +78,14 @@ async def processar_zip(arquivo: UploadFile = File(...)):
                             cstat_node = node
                             break # Encontrámos o que queríamos
                         
-                    cstas_value = cstat_node.text if cstat_node is not None else None
+                    cstat_value = cstat_node.text if cstat_node is not None else None
 
                     # --- APLICAÇÃO DAS REGRAS ---
                     
                     # REGRA 1: REJEITADOS
                     # Se cStat não for 100 (Autorizado) ou 150 (Autorizado fora de prazo - comum em NFC-e)
 
-                    if cstas_value not in ['100', '150']:
+                    if cstat_value not in ['100', '150']:
                         rejeitados.append((nome_arquivo, conteudo_xml))
 
                     # Se o cStat for 100 ou 150, verificamos a contingência
@@ -156,7 +156,7 @@ async def processar_zip(arquivo: UploadFile = File(...)):
 """""
 # === ENDPOINT PARA VÁRIOS XMLS ===
 @app.post("/processar-xmls/")
-async def processar_xmls(arquivos: List[UploadFile] = File(...)):
+def processar_xmls(arquivos: List[UploadFile] = File(...)):
     ""
     Este endpoint recebe UMA LISTA de ficheiros XML, processa-os
     e devolve um ZIP com o resultado.
@@ -174,7 +174,7 @@ async def processar_xmls(arquivos: List[UploadFile] = File(...)):
         # Garante que estamos a processar apenas arquivos XML
         if arquivo.filename and arquivo.filename.endswith('.xml'):
             # Lê o conteúdo do XML
-            conteudo_xml = await arquivo.read()
+            conteudo_xml = arquivo.read()
             nome_arquivo = arquivo.filename # Guardamos o nome
             
             # --- Etapa 2: Validar o XML (Lógica IDÊNTICA) ---
