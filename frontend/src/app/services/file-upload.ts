@@ -4,16 +4,14 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpRequest, HttpEventType, HttpEvent } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
+import { environment } from '../../environments/environment';
+
 @Injectable({
   providedIn: 'root'
 })
 export class FileUploadService {
 
-  // Endpoint 1 (o antigo)
-  private zipApiUrl = 'http://10.93.15.125:8000/processar-zip/';
-  
-  // Endpoint 2 (O NOVO)
-  // private xmlApiUrl = 'http://127.0.0.1:8000/processar-xmls/';
+  private zipApiUrl = environment.apiUrl;
 
   constructor(private http: HttpClient) { }
 
@@ -35,7 +33,7 @@ export class FileUploadService {
 
   /**
    * NOVA FUNÇÃO: Enviar MÚLTIPLOS ficheiros XML
-   
+
   uploadXmls(files: FileList): Observable<any> {
     const formData: FormData = new FormData();
 

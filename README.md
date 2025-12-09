@@ -68,8 +68,12 @@ ng serve
 
 * **Validação de Status (cStat):** Verifica se a nota está autorizada (100) ou autorizada fora de prazo (150).
 * **Separação por Tipo de Emissão:** Identifica notas emitidas em contingência.
-* **Alta Performance:** Utiliza processamento síncrono em pool de threads no backend para não bloquear requisições.
-* **Interface Rica:** Upload com drag-and-drop, visualização de progresso e feedback visual.
+* **Relatório de Rejeições:** Gera automaticamente um arquivo `relatorio_erros.csv` listando os motivos de cada recusa.
+* **Resumo Visual:** Exibe um painel com Gráfico de Rosca (Donut Chart) e estatísticas detalhadas do lote processado.
+* **Alta Performance:**
+  * **Backend:** Processamento síncrono em pool de threads.
+  * **Frontend:** Compressão ZIP via **Web Worker** para manter a interface fluida mesmo com milhares de arquivos.
+* **Interface Rica:** Upload com drag-and-drop, visualização de progresso e feedback visual de alto contraste.
 
 ## 🤝 Contribuição
 
