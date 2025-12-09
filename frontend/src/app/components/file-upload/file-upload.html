@@ -1,95 +1,168 @@
-<div class="rounded-3xl p-8 max-w-2xl mx-auto bg-neutral border border-primary">
+<!-- Toast (notificações) -->
+<p-toast></p-toast>
 
-  <div class="flex justify-center mb-6">
-    <div class="rounded-full p-1 flex bg-neutral-200 border-2 border-primary-dark shadow-lg"> 
-      <label class="relative inline-flex items-center cursor-pointer">
-        <input 
-          type="radio" 
-          name="uploadMode" 
-          value="zip" 
-          class="sr-only"
-          [(ngModel)]="uploadMode"
-          (ngModelChange)="onModeChange()">
-        <span 
-          class="px-4 py-2 rounded-full transition-colors duration-300 shadow-sm"
-          [class.bg-primary]="uploadMode === 'zip'"
-          [class.text-green-50]="uploadMode === 'zip'"
-          [class.bg-transparent]="uploadMode !== 'zip'"
-          [class.text-primary-dark]="uploadMode !== 'zip'">
-          Upload de ZIP
-        </span>
-      </label>
-      <label class="relative inline-flex items-center cursor-pointer">
-        <input 
-          type="radio" 
-          name="uploadMode" 
-          value="xmls" 
-          class="sr-only"
-          [(ngModel)]="uploadMode"
-          (ngModelChange)="onModeChange()">
-        <span 
-          class="px-4 py-2 rounded-full transition-colors duration-300 shadow-sm"
-          [class.bg-primary]="uploadMode === 'xmls'"
-          [class.text-green-50]="uploadMode === 'xmls'"
-          [class.bg-transparent]="uploadMode !== 'xmls'"
-          [class.text-primary-dark]="uploadMode !== 'xmls'">
-          Upload de XMLs
-        </span>
-      </label>
+<div class="flex justify-center p-4">
+  <!-- Aumentei maxWidth para 80rem para evitar scroll horizontal -->
+  <p-card header="Processamento de Arquivos" [style]="{ width: '100%', maxWidth: '80rem' }" styleClass="shadow-xl">
+
+    <div class="flex flex-col items-center w-full">
+
+      <!-- Seletor de Modo: Escolha entre ZIP único ou múltiplos XMLs -->
+      <div class="mb-8 w-full flex justify-center">
+        <p-selectButton [options]="modeOptions" [(ngModel)]="uploadMode" (onChange)="onModeChange()" optionLabel="label"
+          optionValue="value" styleClass="w-full sm:w-auto">
+          <ng-template let-item pTemplate="item">
+            <div [pTooltip]="item.desc" tooltipPosition="bottom"
+              class="flex flex-col items-center justify-center p-2 w-full h-full">
+              <span>{{ item.label }}</span>
+            </div>
+          </ng-template>
+        </p-selectButton>
+      </div>
+
+      <!-- Área de Upload de Arquivos -->
+      <div class="w-full">
+        <!--
+          Configuração do componente p-fileUpload:
+          mode="advanced": Permite templates personalizados
+          customUpload="true": Usamos nossa própria lógica de envio (myUploader)
+          showUploadButton/showCancelButton="false": Escondemos os nativos para usar os nossos no header
+          [multiple]="true": Sempre true para garantir que o drag'n'drop aceite múltiplos.
+                              O controle de quantidade é feito via [fileLimit].
+        -->
+        <p-fileUpload #fileUpload mode="advanced" [name]="'myfile[]'" [customUpload]="true"
+          (uploadHandler)="myUploader($event)" (onError)="onUploadError($event)" [multiple]="true"
+          [accept]="uploadMode === 'zip' ? '.zip' : '.xml'" [maxFileSize]="50000000"
+          [fileLimit]="uploadMode === 'zip' ? 1 : 1000" [showUploadButton]="false" [showCancelButton]="false"
+          invalidFileSizeMessageSummary="Arquivo muito grande" invalidFileSizeMessageDetail="O tamanho máximo é {0}."
+          styleClass="w-full">
+
+          <!--
+             TEMPLATE DO CABEÇALHO
+             Personalizado para centralizar os botões Escolher, Processar e Limpar.
+          -->
+          <ng-template pTemplate="header" let-files let-chooseCallback="chooseCallback"
+            let-clearCallback="clearCallback" let-uploadCallback="uploadCallback">
+            <div class="flex flex-wrap justify-center gap-4 py-4 border-b border-surface-200 dark:border-surface-700">
+              <p-button (onClick)="chooseCallback()" icon="pi pi-plus" label="Escolher" [outlined]="true"
+                [disabled]="isUploading"></p-button>
+              <p-button (onClick)="uploadCallback()" icon="pi pi-cloud-upload" label="Processar" severity="success"
+                [disabled]="!files || files.length === 0 || isUploading"></p-button>
+              <p-button (onClick)="clearCallback()" icon="pi pi-times" label="Limpar" severity="danger"
+                [outlined]="true" [disabled]="!files || files.length === 0 || isUploading"></p-button>
+            </div>
+          </ng-template>
+
+          <!--
+             TEMPLATE DE CONTEÚDO (CORPO)
+             Gerencia o que é exibido dentro da área principal de upload.
+             Tem 3 estados principais:
+             1. Enviando (isUploading): Mostra Knob de progresso.
+             2. Arquivos Selecionados: Mostra lista customizada.
+             3. Vazio: Mostra área de drop/seleção.
+          -->
+          <ng-template pTemplate="content">
+
+            <!-- ESTADO 1: ENVIANDO/PROCESSANDO -->
+            @if (isUploading) {
+            <div class="flex flex-col items-center justify-center p-8">
+              <!-- Knob visual para progresso (0-100) -->
+              <p-knob [(ngModel)]="progress" [readonly]="true" [size]="150" valueColor="var(--primary-color)"
+                rangeColor="var(--surface-300)"></p-knob>
+              <span class="mt-4 text-primary font-semibold text-lg">Processando...</span>
+            </div>
+
+            <!-- ESTADO 2: ARQUIVOS JÁ SELECIONADOS -->
+            } @else if (fileUpload.files.length > 0) {
+            <div class="flex flex-col gap-4 p-4">
+
+              <!-- RESUMO DA SELEÇÃO (Padrão) -->
+              <div
+                class="flex flex-col sm:flex-row items-center justify-between p-4 bg-surface-50 dark:bg-surface-800 rounded-lg border surface-border gap-4">
+                <div class="flex flex-col items-center sm:items-start text-center sm:text-left">
+                  <span class="font-bold text-xl">{{ fileUpload.files.length }} arquivos selecionados</span>
+                  <span class="text-sm text-gray-500">Tamanho total: {{ totalSize }}</span>
+
+                  <!-- Exibir nome do arquivo ZIP se for upload único -->
+                  @if (uploadMode === 'zip' && fileUpload.files[0]) {
+                  <span class="text-primary font-semibold mt-1">{{ fileUpload.files[0].name }}</span>
+                  }
+                </div>
+
+                <!-- Botão de "Ver Todos" (Escondido se for ZIP) -->
+                @if (uploadMode !== 'zip') {
+                <div class="flex gap-2">
+                  <p-button [label]="showFileList ? 'Ocultar Detalhes' : 'Ver Todos'"
+                    [icon]="showFileList ? 'pi pi-eye-slash' : 'pi pi-eye'" [outlined]="true"
+                    (onClick)="toggleFileList()"></p-button>
+                </div>
+                }
+              </div>
+
+              <!-- LISTA DE ARQUIVOS (Virtual Scroll + Pesquisa) -->
+              <!-- Só renderiza se showFileList for true e NÃO for ZIP -->
+              @if (showFileList && uploadMode !== 'zip') {
+
+              <!-- BARRA DE PESQUISA -->
+              <div class="flex justify-center mb-2">
+                <p-iconField iconPosition="left" class="w-full">
+                  <p-inputIcon styleClass="pi pi-search" />
+                  <input type="text" pInputText placeholder="Pesquisar arquivo..." [(ngModel)]="searchTerm"
+                    class="w-full" />
+                </p-iconField>
+              </div>
+
+              <!--
+                   Usamos p-scroller para renderizar apenas os itens visíveis.
+                   scrollHeight="400px": Altura máxima do container com scroll.
+                   itemSize="80": Altura fixa de cada linha (px) para cálculo do scroll.
+                -->
+              <p-scroller [items]="filteredFiles" [itemSize]="80" scrollHeight="400px"
+                styleClass="border surface-border rounded-lg" [style]="{'width': '100%'}">
+                <ng-template pTemplate="item" let-file let-options="options">
+                  <div
+                    class="flex items-center justify-between p-3 border-b surface-border hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors h-[80px]">
+                    <!-- min-w-0 é CRÍTICO para o truncate funcionar dentro do flex -->
+                    <div class="flex items-center gap-3 overflow-hidden min-w-0 flex-1">
+                      <i class="pi pi-file text-2xl text-primary flex-shrink-0"></i>
+                      <div class="flex flex-col overflow-hidden min-w-0">
+                        <!-- USANDO INNERHTML PARA O HIGHLIGHT -->
+                        <span class="font-semibold truncate block" [title]="file.name"
+                          [innerHTML]="file.name | highlight: searchTerm"></span>
+                        <span class="text-sm text-gray-500 flex-shrink-0">{{fileUpload.formatSize(file.size)}}</span>
+                      </div>
+                    </div>
+
+                    <!-- Botão de remover: Usa removeFile passando o OBJETO file, pois o index do scroller pode não bater com o original se filtrado -->
+                    <p-button icon="pi pi-times" [text]="true" severity="danger" class="flex-shrink-0 ml-2"
+                      (onClick)="removeFile($event, file)"></p-button>
+                  </div>
+                </ng-template>
+              </p-scroller>
+              }
+
+            </div>
+
+            <!-- ESTADO 3: VAZIO / ESTADO INICIAL -->
+            } @else {
+            <div class="flex flex-col items-center justify-center py-10 text-center cursor-pointer"
+              (click)="fileUpload.choose()">
+              <i class="pi pi-cloud-upload text-6xl text-primary mb-4 opacity-50"></i>
+              <p class="text-lg font-semibold text-gray-600">Arraste e solte arquivos aqui ou clique para selecionar</p>
+              <p class="text-sm text-gray-500 mt-2">
+                @if (uploadMode === 'zip') {
+                Suporta apenas arquivos .zip
+                } @else {
+                Suporta múltiplos arquivos .xml
+                }
+              </p>
+            </div>
+            }
+          </ng-template>
+
+        </p-fileUpload>
+      </div>
+
     </div>
-  </div>
-
-  <div class="flex flex-col items-center">
-    <label 
-      for="fileInput" 
-      class="text-green-50 font-bold shadow-md py-3 px-6 rounded-full cursor-pointer transition-transform duration-300 transform hover:scale-105 bg-primary"
-      [class.cursor-not-allowed]="isUploading">
-      
-      @if (uploadMode === 'zip') {
-        <span>Escolher Ficheiro ZIP</span>
-      } @else {
-        <span>Escolher Ficheiros XML</span>
-      }
-    </label>
-    
-    <input 
-      type="file" 
-      id="fileInput"
-      class="hidden"
-      (change)="onFileSelected($event)"
-      [accept]="uploadMode === 'zip' ? '.zip' : '.xml'"
-      [multiple]="uploadMode === 'xmls'"
-      [disabled]="isUploading" 
-    />
-
-    <div class="mt-4 text-center h-6">
-      @if (selectedFiles && selectedFiles.length > 0) {
-        <span class="text-primary-dark">
-          @if (uploadMode === 'zip') {
-            {{ selectedFiles[0].name }}
-          } @else {
-            {{ selectedFiles.length }} arquivos selecionados
-          }
-        </span>
-      } @else {
-        <span class="text-gray-500">Nenhum ficheiro selecionado</span>
-      }
-    </div>
-  </div>
-
-  <div class="mt-8 text-center">
-    <button 
-      (click)="onUpload()" 
-      [disabled]="!selectedFiles || selectedFiles.length === 0 || isUploading"
-      class="bg-primary text-green-50 font-bold shadow-md py-3 px-12 rounded-full transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
-      
-      <span>Processar</span>
-    </button>
-  </div>
-
-  @if (uploadMessage) {
-    <div class="mt-4 text-center h-6">
-      <span class="text-primary-dark">{{ uploadMessage }}</span>
-    </div>
-  }
+  </p-card>
 </div>
