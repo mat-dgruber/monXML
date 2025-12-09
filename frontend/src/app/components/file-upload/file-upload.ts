@@ -1,6 +1,6 @@
 // src/app/components/file-upload/file-upload.component.ts
 
-import { Component, inject, ViewChild } from '@angular/core';
+import { Component, inject, ViewChild, ChangeDetectorRef } from '@angular/core';
 import { FileUploadService } from '../../services/file-upload';
 import { FormsModule } from '@angular/forms';
 import { HttpEventType } from '@angular/common/http';
@@ -22,6 +22,8 @@ import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
 import { HighlightPipe } from '../../pipes/highlight.pipe'; // Custom pipe
 import { TooltipModule } from 'primeng/tooltip';
+import { DialogModule } from 'primeng/dialog';
+import { ChartModule } from 'primeng/chart';
 
 // JSZip é usado para compactar múltiplos arquivos XML no cliente antes de enviar
 import JSZip from 'jszip';
@@ -45,7 +47,10 @@ import JSZip from 'jszip';
     IconFieldModule,
     InputIconModule,
     HighlightPipe, // Add pipe
-    TooltipModule
+    HighlightPipe, // Add pipe
+    TooltipModule,
+    DialogModule,
+    ChartModule
   ],
   providers: [MessageService], // Serviço de mensagens do PrimeNG
   templateUrl: './file-upload.html',
@@ -77,12 +82,24 @@ export class FileUploadComponent {
   progress: number = 0;
 
   // UI Control
+  // UI Control
   showFileList: boolean = false;
   searchTerm: string = '';
+  showSummaryDialog: boolean = false;
+  processingSummary = {
+    approved: 0,
+    contingency: 0,
+    rejected: 0
+  };
+
+  // Dados do Gráfico
+  chartData: any;
+  chartOptions: any;
 
   // Injeção de dependências
   private fileUploadService = inject(FileUploadService);
   private messageService = inject(MessageService);
+  private cdr = inject(ChangeDetectorRef);
 
   // Acesso ao componente p-fileUpload na view para manipular arquivos/limpar
   @ViewChild('fileUpload') fileUploadComponent!: FileUpload;
@@ -176,32 +193,81 @@ export class FileUploadComponent {
         // --- MODO XMLS (Com JSZip) ---
         // Se o usuário selecionou múltiplos XMLs, compactamos no navegador
       } else {
-        this.messageService.add({ severity: 'info', summary: 'Comprimindo', detail: 'Agrupando arquivos...' });
-        const zip = new JSZip();
+        if (typeof Worker !== 'undefined') {
+          // Cria o Worker
+          const worker = new Worker(new URL('../../workers/zip.worker', import.meta.url));
 
-        // Adiciona cada arquivo selecionado ao objeto ZIP
-        // Se houver MUITOS arquivos, isso ainda pode travar.
-        // Para uma solução perfeita, usaríamos um Web Worker ou chunking com setTimeout,
-        // mas wrapando tudo já garante que o spinner apareça.
-        files.forEach((file: any) => {
-          zip.file(file.name, file);
-        });
+          this.messageService.add({ severity: 'info', summary: 'Comprimindo', detail: 'Agrupando via Worker...' });
 
-        this.messageService.add({ severity: 'info', summary: 'Comprimindo', detail: 'Gerando arquivo ZIP...' });
+          worker.onmessage = ({ data }) => {
+            if (data.type === 'progress') {
+              this.progress = data.value;
+              this.cdr.detectChanges(); // Força atualização da UI no progresso
+            } else if (data.type === 'complete') {
+              this.messageService.add({ severity: 'info', summary: 'Enviando', detail: 'A enviar pacote...' });
+              this.progress = 0;
+              this.subscribeToUpload(this.fileUploadService.uploadZip(data.blob));
+              worker.terminate(); // Limpa o worker
+            }
+          };
 
-        // Gera o binário do ZIP de forma assíncrona
-        // compression: 'DEFLATE' pode ser mais lento, 'STORE' é rápido. Vamos usar o padrão.
-        zip.generateAsync({ type: 'blob' }, (metadata) => {
-          // Atualiza progresso da COMPRESSÃO (lado cliente)
-          this.progress = Math.round(metadata.percent);
-        }).then((zipBlob) => {
-          const zipFile = new File([zipBlob], "xmls_do_navegador.zip", { type: "application/zip" });
-          this.messageService.add({ severity: 'info', summary: 'Enviando', detail: 'A enviar pacote...' });
-          this.progress = 0; // Reset para o upload real
-          this.subscribeToUpload(this.fileUploadService.uploadZip(zipFile));
-        });
+          // Envia arquivos para o worker
+          worker.postMessage({ files: files });
+
+        } else {
+          // Fallback para thread principal (se worker não suportado)
+          this.messageService.add({ severity: 'warn', summary: 'Atenção', detail: 'Worker não suportado. Usando thread principal.' });
+
+          const zip = new JSZip();
+          files.forEach((file: any) => {
+            zip.file(file.name, file);
+          });
+
+          zip.generateAsync({ type: 'blob' }, (metadata) => {
+            this.progress = Math.round(metadata.percent);
+          }).then((zipBlob) => {
+            const zipFile = new File([zipBlob], "xmls_do_navegador.zip", { type: "application/zip" });
+            this.messageService.add({ severity: 'info', summary: 'Enviando', detail: 'A enviar pacote...' });
+            this.progress = 0;
+            this.subscribeToUpload(this.fileUploadService.uploadZip(zipFile));
+          });
+        }
       }
     }, 100);
+  }
+
+  initChart() {
+    const documentStyle = getComputedStyle(document.documentElement);
+    // Configuração de cores para o gráfico
+    const colorApproved = documentStyle.getPropertyValue('--green-500') || '#22c55e';
+    const colorContingency = documentStyle.getPropertyValue('--orange-500') || '#f97316';
+    const colorRejected = documentStyle.getPropertyValue('--red-500') || '#ef4444';
+
+    this.chartData = {
+      labels: ['Aprovados', 'Contingência', 'Rejeitados'],
+      datasets: [
+        {
+          data: [
+            this.processingSummary.approved,
+            this.processingSummary.contingency,
+            this.processingSummary.rejected
+          ],
+          backgroundColor: [colorApproved, colorContingency, colorRejected],
+          hoverBackgroundColor: [colorApproved, colorContingency, colorRejected]
+        }
+      ]
+    };
+
+    this.chartOptions = {
+      cutout: '60%',
+      plugins: {
+        legend: {
+          labels: {
+            color: documentStyle.getPropertyValue('--text-color')
+          }
+        }
+      }
+    };
   }
 
   /**
@@ -233,6 +299,18 @@ export class FileUploadComponent {
           this.messageService.add({ severity: 'success', summary: 'Sucesso', detail: 'Download concluído!' });
           this.isUploading = false;
           this.progress = 100;
+
+          // Captura os dados do resumo dos Headers
+          const headers = event.headers;
+          this.processingSummary = {
+            approved: parseInt(headers.get('X-Count-Approved') || '0'),
+            contingency: parseInt(headers.get('X-Count-Contingency') || '0'),
+            rejected: parseInt(headers.get('X-Count-Rejected') || '0')
+          };
+
+          // Exibe o dialog de resumo
+          this.showSummaryDialog = true;
+          this.initChart(); // Inicializa o gráfico com os novos dados
 
           // Limpa a lista de arquivos selecionados na UI
           if (this.fileUploadComponent) {

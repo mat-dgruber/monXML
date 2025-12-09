@@ -1,6 +1,7 @@
 import uvicorn
 import io
 import zipfile
+import csv
 import time
 
 # Importamos 'etree' do lxml para parsing de XML de alta performance
@@ -36,6 +37,7 @@ app.add_middleware(
     allow_credentials=True,   # Permitir cookies/credenciais
     allow_methods=["*"],      # Permitir todos os métodos (GET, POST, OPTIONS, etc.)
     allow_headers=["*"],      # Permitir todos os headers
+    expose_headers=["X-Count-Approved", "X-Count-Contingency", "X-Count-Rejected"] # Importante!
 )
 
 
@@ -58,6 +60,17 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
         io.BytesIO: Um objeto em memória contendo o novo arquivo ZIP processado.
     """
     
+    # Lógica de tracking para relatório e resumo
+    # Listas para guardar tuplas (nome_arquivo, cstat, xmotivo)
+    lista_detalhes_rejeicao = []
+    
+    # Contadores
+    stats = {
+        "aprovados": 0,
+        "contingencia": 0,
+        "rejeitados": 0
+    }
+
     # Criamos um buffer em memória para o ZIP de saída (evita gravar em disco = + performance)
     memoria_zip_saida = io.BytesIO()
 
@@ -83,21 +96,31 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
                         # Parsing do XML para árvore de elementos (DOM)
                         root = ET.fromstring(conteudo_xml)
                         
+                        # Definição dos namespaces geralmente usados na NFe
+                        ns = {'ns': 'http://www.portalfiscal.inf.br/nfe'}
+                        
                         # --- VALIDAÇÃO 1: Encontrar a tag 'cStat' (Status) ---
-                        # Usamos 'endswith' porque a tag geralmente vem com namespace (ex: {http://www.portalfiscal.inf.br/nfe}cStat)
+                        # Busca cStat ignorando namespace ou usando wildcard se necessário
+                        # Para simplificar e manter a lógica robusta anterior:
                         cstat_node = None
+                        xmotivo_node = None
+                        
                         for node in root.iter():
                             if node.tag.endswith('cStat'):
                                 cstat_node = node
-                                break
+                            elif node.tag.endswith('xMotivo'):
+                                xmotivo_node = node
                         
-                        cstat_value = cstat_node.text if cstat_node is not None else None
+                        cstat_value = cstat_node.text if cstat_node is not None else "N/A"
+                        xmotivo_value = xmotivo_node.text if xmotivo_node is not None else "Motivo não encontrado"
 
                         # --- REGRA DE NEGÓCIO 1: Filtrar por cStat ---
                         # Se cStat não for 100 (Autorizado) ou 150 (Autorizado Fora de Prazo), é REJEITADO.
                         if cstat_value not in ['100', '150']:
                             # Gravamos na pasta 'rejeitados/' dentro do novo ZIP
                             zip_out.writestr(f'rejeitados/{nome_arquivo}', conteudo_xml)
+                            stats["rejeitados"] += 1
+                            lista_detalhes_rejeicao.append([nome_arquivo, cstat_value, xmotivo_value])
                         
                         else:
                             # --- VALIDAÇÃO 2: Verificar Tipo de Emissão (tpEmis) ---
@@ -113,15 +136,29 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
                             # tpEmis = 1: Emissão Normal -> Pasta 'aprovados/'
                             if tpemis_value == '1':
                                 zip_out.writestr(f'aprovados/{nome_arquivo}', conteudo_xml)
+                                stats["aprovados"] += 1
                             # Outros valores (EX: 9): Contingência -> Pasta 'contingencia/'
                             else: 
                                 zip_out.writestr(f'contingencia/{nome_arquivo}', conteudo_xml)
+                                stats["contingencia"] += 1
                         
                     except ET.ParseError:
                         # Se o arquivo .xml estiver corrompido ou mal formatado
                         print(f"Erro ao analisar o XML: {nome_arquivo}")
                         zip_out.writestr(f'rejeitados/{nome_arquivo}', conteudo_xml)
-                        
+                        stats["rejeitados"] += 1
+                        lista_detalhes_rejeicao.append([nome_arquivo, "ERRO_PARSE", "Arquivo XML inválido ou corrompido"])
+
+            # --- GERAÇÃO DO RELATÓRIO DE REJEIÇÕES (CSV) ---
+            if lista_detalhes_rejeicao:
+                csv_buffer = io.StringIO()
+                writer = csv.writer(csv_buffer, delimiter=';') # Ponto e vírgula para Excel PT-BR
+                writer.writerow(['Nome do Arquivo', 'Código Status (cStat)', 'Motivo (xMotivo)'])
+                writer.writerows(lista_detalhes_rejeicao)
+                
+                # Grava o CSV no ZIP
+                zip_out.writestr('rejeitados/relatorio_erros.csv', csv_buffer.getvalue().encode('utf-8-sig')) # utf-8-sig para Excel abrir direto
+
         except zipfile.BadZipFile:
             # Caso o arquivo enviado pelo usuário não seja um ZIP válido
             print("Erro: Ficheiro não é um ZIP válido.")
@@ -130,7 +167,7 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
     # "Rebobina" o ponteiro do arquivo em memória para o início (byte 0) para que possa ser lido
     memoria_zip_saida.seek(0)
     
-    return memoria_zip_saida
+    return memoria_zip_saida, stats
 
 
 # -------------------------------------------------------------------
@@ -155,7 +192,7 @@ async def processar_zip(arquivo: UploadFile = File(...)):
     # Delegação para WORKER THREAD:
     # Como 'processar_zip_sync' é pesado (CPU-bound), usamos 'run_in_threadpool'.
     # O FastAPI executa a função numa thread separada e 'await' aguarda o resultado sem bloquear o loop principal.
-    memoria_zip_saida = await run_in_threadpool(processar_zip_sync, conteudo_zip_recebido)
+    memoria_zip_saida, stats = await run_in_threadpool(processar_zip_sync, conteudo_zip_recebido)
     
     end_time = time.perf_counter()
     duration = end_time - start_time
@@ -166,12 +203,21 @@ async def processar_zip(arquivo: UploadFile = File(...)):
     # --- Retorno da Resposta ---
     # Devolvemos os bytes diretos, marcando o Content-Type como ZIP.
     # O navegador identificará como download de arquivo.
+    
+    # Headers customizados com o resumo
+    headers = {
+        "Content-Disposition": "attachment; filename=xmls_processados.zip",
+        "X-Count-Approved": str(stats["aprovados"]),
+        "X-Count-Contingency": str(stats["contingencia"]),
+        "X-Count-Rejected": str(stats["rejeitados"])
+    }
+    
+    # Expose headers para o CORS (importante para o Angular conseguir ler)
+    
     return Response(
         content=memoria_zip_saida.getvalue(), # Obtém os bytes brutos do buffer
         media_type="application/x-zip-compressed",
-        headers={
-            "Content-Disposition": "attachment; filename=xmls_processados.zip"
-        }
+        headers=headers
     )
 
 
