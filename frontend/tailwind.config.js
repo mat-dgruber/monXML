@@ -1,20 +1,34 @@
- /** @type {import('tailwindcss').Config} */
+/** @type {import('tailwindcss').Config} */
 export default {
-   content: ["./src/**/*.{html,ts}"],
-   theme: {
-     extend: {
+  content: ["./src/**/*.{html,ts}"],
+  theme: {
+    extend: {
       colors: {
-        'primary': '#F0A040',
-        'primary-light': '#DA9B5B',
-        'primary-dark': '#593E2B',
-        'neutral': '#B0B0B0',
-        'accent': '#D8704C',
-        'background': '#2C3E40',
-        'text': '#FBF9F6',
+        // Cores Principais
+        'primary': '#5d8a8c', // Petróleo
+        'secondary': '#d8704c', // Laranja
+        'brown': '#593e2b', // Marrom
+        'beige': '#f3e4c9', // Bege
+
+        // Neutros
+        'background': '#fbf9f6', // Fundo
+        'text': '#3a3a3a', // Texto
+
+        // Destaque
+        'accent': '#8a9a8b', // Verde Sálvia
+
+        // Funcionais
+        'success': '#5a9261',
+        'error': '#d15c5c',
+
+        // Compatibilidade (se necessário manter nomes antigos, mapeie para os novos)
+        // 'primary-light': '...',
+        // 'primary-dark': '...',
+        // 'neutral': '...',
       },
     },
-   },
-   plugins: [
+  },
+  plugins: [
     function ({ addBase, theme }) {
       addBase({
         'h1, h2, h3, h4, h5, h6': {
@@ -30,4 +44,4 @@ export default {
       });
     },
   ],
- }
+}

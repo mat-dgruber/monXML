@@ -1,6 +1,7 @@
 /* styles.css */
 
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap');
+@import "primeicons/primeicons.css";
 
 @tailwind base;
 @tailwind components;
@@ -12,10 +13,10 @@
 */
 body {
   font-family: 'Montserrat', sans-serif;
-  
+
   /* Usa as classes do Tailwind que tu próprio definiste! */
   @apply bg-background text-text;
-  
+
   /* Mantém isto para centralizar o teu card */
   height: 100%;
   margin: 0;

@@ -3,72 +3,88 @@ import io
 import zipfile
 import time
 
+# Importamos 'etree' do lxml para parsing de XML de alta performance
 from lxml import etree as ET
 from typing import List
-
 
 from fastapi import FastAPI, File, UploadFile, Response
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-# 1. IMPORTAR O RUN_IN_THREADPOOL
+# Importamos 'run_in_threadpool' para executar tarefas CPU-bound (síncronas) sem bloquear o Event Loop assíncrono do FastAPI
 from starlette.concurrency import run_in_threadpool 
 
 # Inicia a aplicação FastAPI
+# metadados servem para a documentação automática (Swagger UI em /docs)
 app = FastAPI(
-    title="Processador de XML",
-    description="API para validar cStat de XMLs e separá-los."
+    title="Processador de XML (MonXML)",
+    description="API especializada em validação de cStat e separação de XMLs de NF-e.",
+    version="1.0.0"
 )
 
-# Define as origens permitidas
+# Configuração de CORS (Cross-Origin Resource Sharing)
+# Define quem pode acessar esta API. Importante configurar corretamente para produção.
 origins = [
-    "http://localhost:4200",
-    "http://10.93.15.125:4200",
-    "http://127.0.0.1:4200"
+    "http://localhost:4200",      # Angular local
+    "http://10.93.15.125:4200",   # Acesso via IP da rede
+    "http://127.0.0.1:4200",       # Localhost IP
+    "http://10.93.15.125:54580",   # Acesso via IP da rede
 ]
 
-# Adiciona o middleware CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=origins,    # Lista de origens permitidas
+    allow_credentials=True,   # Permitir cookies/credenciais
+    allow_methods=["*"],      # Permitir todos os métodos (GET, POST, OPTIONS, etc.)
+    allow_headers=["*"],      # Permitir todos os headers
 )
 
 
 # -------------------------------------------------------------------
-# 2. TODA A LÓGICA PESADA (SÍNCRONA) VAI PARA A SUA PRÓPRIA FUNÇÃO
+# LÓGICA DE PROCESSAMENTO (SÍNCRONA / CPU-BOUND)
 # -------------------------------------------------------------------
 def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
     """
-    Esta é uma função síncrona (bloqueante) que faz todo
-    o trabalho pesado. O FastAPI vai executá-la numa thread pool.
+    Função síncrona que processa o arquivo ZIP recebido.
+    
+    MOTIVO DE SER SÍNCRONA:
+    O processamento de arquivos ZIP e parsing de XML são tarefas intensivas em CPU (CPU-bound).
+    Em Python, código síncrono CPU-bound bloqueia o Event Loop do asyncio.
+    Para evitar travar o servidor, isolamos esta lógica nesta função e a chamamos via 'run_in_threadpool'.
+    
+    Args:
+        conteudo_zip_recebido (bytes): O conteúdo binário do arquivo ZIP enviado pelo usuário.
+        
+    Returns:
+        io.BytesIO: Um objeto em memória contendo o novo arquivo ZIP processado.
     """
     
-    # Criamos o ZIP de saída
+    # Criamos um buffer em memória para o ZIP de saída (evita gravar em disco = + performance)
     memoria_zip_saida = io.BytesIO()
 
-    # Abrimos o ZIP de saída
+    # Abrimos o ZIP de saída em modo de escrita ('w') com compressão DEFLATED
     with zipfile.ZipFile(memoria_zip_saida, 'w', zipfile.ZIP_DEFLATED) as zip_out:
         
-        # Abrimos o ZIP de entrada
+        # Abrimos o ZIP de entrada a partir dos bytes recebidos
         try:
             with zipfile.ZipFile(io.BytesIO(conteudo_zip_recebido), 'r') as zip_in:
                 
-                # Itera por cada arquivo dentro do ZIP
+                # Itera por cada arquivo existente dentro do ZIP enviado
                 for nome_arquivo in zip_in.namelist():
                     
-                    if not nome_arquivo.endswith('.xml'):
-                        continue # Pula ficheiros que não são XML
+                    # Ignoramos arquivos que não sejam XML (ex: imagens, txt, pastas ocultas)
+                    if not nome_arquivo.lower().endswith('.xml'):
+                        continue 
 
-                    # Lê o conteúdo do XML
+                    # Lê o conteúdo binário do XML específico
                     conteudo_xml = zip_in.read(nome_arquivo)
                     
-                    # --- Etapa 2: Validar o cStat do XML ---
+                    # --- Lógica de Validação: cStat ---
                     try:
+                        # Parsing do XML para árvore de elementos (DOM)
                         root = ET.fromstring(conteudo_xml)
                         
-                        # --- VALIDAÇÃO 1: Encontrar o cStat ---
+                        # --- VALIDAÇÃO 1: Encontrar a tag 'cStat' (Status) ---
+                        # Usamos 'endswith' porque a tag geralmente vem com namespace (ex: {http://www.portalfiscal.inf.br/nfe}cStat)
                         cstat_node = None
                         for node in root.iter():
                             if node.tag.endswith('cStat'):
@@ -77,12 +93,14 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
                         
                         cstat_value = cstat_node.text if cstat_node is not None else None
 
-                        # --- APLICAÇÃO DAS REGRAS ---
+                        # --- REGRA DE NEGÓCIO 1: Filtrar por cStat ---
+                        # Se cStat não for 100 (Autorizado) ou 150 (Autorizado Fora de Prazo), é REJEITADO.
                         if cstat_value not in ['100', '150']:
+                            # Gravamos na pasta 'rejeitados/' dentro do novo ZIP
                             zip_out.writestr(f'rejeitados/{nome_arquivo}', conteudo_xml)
                         
                         else:
-                            # --- VALIDAÇÃO 2: Encontrar o tpEmis ---
+                            # --- VALIDAÇÃO 2: Verificar Tipo de Emissão (tpEmis) ---
                             tpemis_node = None
                             for node in root.iter():
                                 if node.tag.endswith('tpEmis'):
@@ -91,44 +109,52 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
                             
                             tpemis_value = tpemis_node.text if tpemis_node is not None else None
 
+                            # --- REGRA DE NEGÓCIO 2: Classificar Aprovados vs Contingência ---
+                            # tpEmis = 1: Emissão Normal -> Pasta 'aprovados/'
                             if tpemis_value == '1':
                                 zip_out.writestr(f'aprovados/{nome_arquivo}', conteudo_xml)
+                            # Outros valores (EX: 9): Contingência -> Pasta 'contingencia/'
                             else: 
                                 zip_out.writestr(f'contingencia/{nome_arquivo}', conteudo_xml)
                         
                     except ET.ParseError:
+                        # Se o arquivo .xml estiver corrompido ou mal formatado
                         print(f"Erro ao analisar o XML: {nome_arquivo}")
                         zip_out.writestr(f'rejeitados/{nome_arquivo}', conteudo_xml)
                         
         except zipfile.BadZipFile:
-            # O ficheiro enviado não era um ZIP válido
+            # Caso o arquivo enviado pelo usuário não seja um ZIP válido
             print("Erro: Ficheiro não é um ZIP válido.")
-            # Escrevemos um ficheiro de erro no zip de saída
             zip_out.writestr('ERRO.txt', 'O ficheiro enviado não era um ZIP válido.')
 
-    # "Rebobina" o arquivo de memória
+    # "Rebobina" o ponteiro do arquivo em memória para o início (byte 0) para que possa ser lido
     memoria_zip_saida.seek(0)
     
     return memoria_zip_saida
 
 
 # -------------------------------------------------------------------
-# 3. O ENDPOINT VOLTA A SER 'ASYNC'
+# ENDPOINT PRINCIPAL (ASSÍNCRONO)
 # -------------------------------------------------------------------
 @app.post("/processar-zip/")
 async def processar_zip(arquivo: UploadFile = File(...)):
     """
-    Este endpoint ASÍNCRONO apenas recebe o ficheiro
-    e delega o trabalho pesado para a thread pool.
+    Endpoint principal para processar o ZIP.
+    RECEBE o arquivo e DEVOLVE um ZIP processado.
+    
+    Esta função é 'async', o que significa que ela roda no Event Loop do FastAPI.
+    NÃO devemos colocar lógica bloqueante/pesada diretamente aqui, senão o servidor
+    para de responder a outras requisições enquanto processa esta.
     """
     
     start_time = time.perf_counter()
 
-    # 4. Lemos o ficheiro de forma assíncrona (correto)
+    # Leitura ASSÍNCRONA do arquivo recebido. Isso libera o Event Loop enquanto o SO lê os dados.
     conteudo_zip_recebido = await arquivo.read()
 
-    # 5. Executamos a função síncrona (pesada) na thread pool
-    #    Isto evita que o servidor bloqueie.
+    # Delegação para WORKER THREAD:
+    # Como 'processar_zip_sync' é pesado (CPU-bound), usamos 'run_in_threadpool'.
+    # O FastAPI executa a função numa thread separada e 'await' aguarda o resultado sem bloquear o loop principal.
     memoria_zip_saida = await run_in_threadpool(processar_zip_sync, conteudo_zip_recebido)
     
     end_time = time.perf_counter()
@@ -137,9 +163,11 @@ async def processar_zip(arquivo: UploadFile = File(...)):
     print(f"Processamento do ficheiro '{arquivo.filename}' concluído em {duration:.2f} segundos.")
 
 
-    # --- Devolver o novo ZIP para o usuário ---
+    # --- Retorno da Resposta ---
+    # Devolvemos os bytes diretos, marcando o Content-Type como ZIP.
+    # O navegador identificará como download de arquivo.
     return Response(
-        content=memoria_zip_saida.getvalue(), # <-- .getvalue() obtém os bytes do BytesIO
+        content=memoria_zip_saida.getvalue(), # Obtém os bytes brutos do buffer
         media_type="application/x-zip-compressed",
         headers={
             "Content-Disposition": "attachment; filename=xmls_processados.zip"

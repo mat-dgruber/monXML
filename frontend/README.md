@@ -1,59 +1,70 @@
-# Frontend
+# Frontend MonXML (Angular)
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 20.1.0.
+Interface web moderna desenvolvida em **Angular v18+** utilizando **PrimeNG** para oferecer uma experiência de usuário robusta no upload e gerenciamento de arquivos XML.
 
-## Development server
+## 🚀 Tecnologias
 
-To start a local development server, run:
+* **Angular:** Framework SPA (Single Page Application).
+* **PrimeNG:** Biblioteca de componentes UI (v21+).
+* **TailwindCSS:** Utilitários CSS para estilização rápida.
+* **JSZip:** Biblioteca para compactação de arquivos ZIP no navegador.
 
-```bash
-ng serve
-```
+## ⚙️ Instalação e Execução Local
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+### Pré-requisitos
 
-## Code scaffolding
+* Node.js (v18 ou superior) instalado.
+* Angular CLI instalado globalmente (`npm install -g @angular/cli`).
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+### Passo a Passo
 
-```bash
-ng generate component component-name
-```
+1. **Acesse a pasta do frontend:**
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+    ```bash
+    cd frontend
+    ```
 
-```bash
-ng generate --help
-```
+2. **Instale as dependências:**
 
-## Building
+    ```bash
+    # Use --legacy-peer-deps se houver conflitos de versão com PrimeNG
+    npm install --legacy-peer-deps
+    ```
 
-To build the project run:
+3. **Execute o servidor de desenvolvimento:**
 
-```bash
-ng build
-```
+    ```bash
+    ng serve
+    ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+    A aplicação estará disponível em `http://localhost:4200`.
 
-## Running unit tests
+## 🐳 Executando com Docker
 
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
+Você pode rodar apenas o frontend em um container Nginx:
 
-```bash
-ng test
-```
+1. **Construir a imagem:**
 
-## Running end-to-end tests
+    ```bash
+    docker build -t monxml-frontend .
+    ```
 
-For end-to-end (e2e) testing, run:
+2. **Rodar o container:**
 
-```bash
-ng e2e
-```
+    ```bash
+    docker run -p 4200:80 monxml-frontend
+    ```
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+    Acesse em `http://localhost:4200`.
 
-## Additional Resources
+## 📂 Principais Componentes
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+* **File Upload:** Componente personalizado (`src/app/components/file-upload`) que permite:
+  * Upload de arquivo único (.zip) ou múltiplos (.xml).
+  * Compactação automática de múltiplos XMLs usando JSZip antes do envio.
+  * Visualização de progresso com componente **Knob**.
+  * Lista de arquivos selecionados antes do processamento.
+
+## 🖌️ Estilização
+
+O projeto utiliza o tema **Aura** do PrimeNG com suporte a modo escuro (Dark Mode) detectado via sistema ou classe CSS. TailwindCSS é usado para layout e espaçamentos.
