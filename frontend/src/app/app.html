@@ -1,7 +1,27 @@
-<main class="mx-auto max-w-4xl p-4 text-center rounded-2xl" style="background-color: var(--secondary-color); color: var(--dark-color);">
-  <h1 class="text-4xl font-bold mb-4" style="font-family: serif;">Processador de XMLs</h1>
+<main class="mx-auto max-w-4xl p-4 rounded-2xl min-h-screen flex flex-col gap-6" style="background-color: var(--secondary-color); color: var(--dark-color);">
 
-  <app-file-upload></app-file-upload>
+  <div class="text-center">
+    <h1 class="text-4xl font-bold mb-2" style="font-family: serif;">Processador de XMLs</h1>
+    <p class="text-gray-500">Ferramenta para análise e busca em arquivos fiscais</p>
+  </div>
 
-  <router-outlet></router-outlet>
+  <!-- Navigation -->
+  <nav class="flex justify-center space-x-4">
+    <a routerLink="/upload"
+       routerLinkActive="!bg-[#5d8a8c] !text-white shadow-lg scale-105"
+       class="px-6 py-2 rounded-full bg-white text-gray-700 font-semibold transition-all duration-300 hover:bg-gray-100 border border-gray-200 shadow-sm flex items-center gap-2">
+      <i class="pi pi-upload"></i> Processar XMLs
+    </a>
+    <a routerLink="/search"
+       routerLinkActive="!bg-[#5d8a8c] !text-white shadow-lg scale-105"
+       class="px-6 py-2 rounded-full bg-white text-gray-700 font-semibold transition-all duration-300 hover:bg-gray-100 border border-gray-200 shadow-sm flex items-center gap-2">
+      <i class="pi pi-search"></i> Busca de Produtos
+    </a>
+  </nav>
+
+  <!-- Route Content w/ Animation Container -->
+  <div class="fade-in">
+    <router-outlet></router-outlet>
+  </div>
+
 </main>
