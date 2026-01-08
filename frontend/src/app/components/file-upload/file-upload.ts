@@ -89,7 +89,13 @@ export class FileUploadComponent {
   processingSummary = {
     approved: 0,
     contingency: 0,
-    rejected: 0
+    rejected: 0,
+    approvedValue: 0,
+    approvedIcms: 0,
+    contingencyValue: 0,
+    contingencyIcms: 0,
+    rejectedValue: 0,
+    rejectedIcms: 0
   };
 
   // Dados do Gráfico
@@ -305,7 +311,13 @@ export class FileUploadComponent {
           this.processingSummary = {
             approved: parseInt(headers.get('X-Count-Approved') || '0'),
             contingency: parseInt(headers.get('X-Count-Contingency') || '0'),
-            rejected: parseInt(headers.get('X-Count-Rejected') || '0')
+            rejected: parseInt(headers.get('X-Count-Rejected') || '0'),
+            approvedValue: parseFloat(headers.get('X-Value-Approved') || '0') || 0,
+            approvedIcms: parseFloat(headers.get('X-Icms-Approved') || '0') || 0,
+            contingencyValue: parseFloat(headers.get('X-Value-Contingency') || '0') || 0,
+            contingencyIcms: parseFloat(headers.get('X-Icms-Contingency') || '0') || 0,
+            rejectedValue: parseFloat(headers.get('X-Value-Rejected') || '0') || 0,
+            rejectedIcms: parseFloat(headers.get('X-Icms-Rejected') || '0') || 0
           };
 
           // Exibe o dialog de resumo
