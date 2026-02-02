@@ -14,6 +14,9 @@ import { MessageService } from 'primeng/api';
 import { SkeletonModule } from 'primeng/skeleton';
 import { KnobModule } from 'primeng/knob';
 import { HighlightPipe } from '../../pipes/highlight.pipe';
+import { DanfeModalComponent } from '../danfe-modal/danfe-modal';
+import { NfeParserService } from '../../services/nfe-parser.service';
+import { NfeData } from '../../models/nfe.model';
 import JSZip from 'jszip';
 
 interface SearchResult {
@@ -47,7 +50,9 @@ interface XmlFileContent {
     SkeletonModule,
     ScrollerModule,
     HighlightPipe,
+    HighlightPipe,
     KnobModule,
+    DanfeModalComponent,
   ],
   providers: [MessageService],
   templateUrl: './product-search.html',
@@ -55,6 +60,7 @@ interface XmlFileContent {
 })
 export class ProductSearch {
   private messageService = inject(MessageService);
+  private nfeParser = inject(NfeParserService);
 
   searchTerm: string = '';
   results: SearchResult[] = [];
@@ -62,6 +68,10 @@ export class ProductSearch {
   progress: number = 0;
   showFileList: boolean = false;
   fileSearchTerm: string = '';
+
+  // DANFE Modal State
+  showDanfe: boolean = false;
+  currentNfeData: NfeData | null = null;
 
   @ViewChild('fileUpload') fileUploadComponent!: FileUpload;
 
@@ -105,11 +115,11 @@ export class ProductSearch {
           } else if (file.name.toLowerCase().endsWith('.xml')) {
             await this.processXmlFile(file);
           }
-           processedCount++;
-           // Only update main progress if not in zip mode (zip updates its own progress)
-           if (!file.name.toLowerCase().endsWith('.zip')) {
-               this.progress = Math.round((processedCount / totalFiles) * 100);
-           }
+          processedCount++;
+          // Only update main progress if not in zip mode (zip updates its own progress)
+          if (!file.name.toLowerCase().endsWith('.zip')) {
+            this.progress = Math.round((processedCount / totalFiles) * 100);
+          }
         }
 
         this.messageService.add({
@@ -211,8 +221,8 @@ export class ProductSearch {
               const cProdEl = prod.getElementsByTagName('cProd')[0];
               const cEANEl = prod.getElementsByTagName('cEAN')[0];
 
-              const cProd = cProdEl ? (cProdEl.textContent || '') : '';
-              const cEAN = cEANEl ? (cEANEl.textContent || '') : '';
+              const cProd = cProdEl ? cProdEl.textContent || '' : '';
+              const cEAN = cEANEl ? cEANEl.textContent || '' : '';
 
               let matched = false;
               // Search Logic: Name (includes), Code (exact/includes), EAN (exact)
@@ -289,8 +299,8 @@ export class ProductSearch {
     if (!this.fileUploadComponent || !this.fileUploadComponent.files) return [];
     if (!this.fileSearchTerm) return this.fileUploadComponent.files;
 
-    return this.fileUploadComponent.files.filter(file =>
-      file.name.toLowerCase().includes(this.fileSearchTerm.toLowerCase())
+    return this.fileUploadComponent.files.filter((file) =>
+      file.name.toLowerCase().includes(this.fileSearchTerm.toLowerCase()),
     );
   }
 
@@ -327,6 +337,30 @@ export class ProductSearch {
       // If 'loadedFiles' already has content, removing from UI list doesn't update 'loadedFiles'.
       // We should probably clear 'loadedFiles' if the user modifies the selection, forcing a re-upload?
       // Or just handle the pending selection.
+    }
+  }
+
+  openDanfe(fileName: string) {
+    const fileContent = this.loadedFiles.find((f) => f.name === fileName);
+
+    if (fileContent) {
+      const data = this.nfeParser.parse(fileContent.content);
+      if (data) {
+        this.currentNfeData = data;
+        this.showDanfe = true;
+      } else {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Ops',
+          detail: 'Não foi possível ler os dados para gerar o DANFE deste XML.',
+        });
+      }
+    } else {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Erro',
+        detail: 'Arquivo original não encontrado em memória.',
+      });
     }
   }
 }
