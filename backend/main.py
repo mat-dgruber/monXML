@@ -3,6 +3,7 @@ import io
 import zipfile
 import csv
 import time
+import os
 
 # Importamos 'etree' do lxml para parsing de XML de alta performance
 from lxml import etree as ET
@@ -94,6 +95,10 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
 
                     # Lê o conteúdo binário do XML específico
                     conteudo_xml = zip_in.read(nome_arquivo)
+
+                    # --- FIX: FLATTEN PATH ---
+                    # Usa apenas o nome do arquivo, ignorando as pastas de origem
+                    nome_limpo = os.path.basename(nome_arquivo)
                     
                     # --- Lógica de Validação: cStat ---
                     try:
@@ -146,11 +151,11 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
                         # Se cStat não for 100 (Autorizado) ou 150 (Autorizado Fora de Prazo), é REJEITADO.
                         if cstat_value not in ['100', '150']:
                             # Gravamos na pasta 'rejeitados/' dentro do novo ZIP
-                            zip_out.writestr(f'rejeitados/{nome_arquivo}', conteudo_xml)
+                            zip_out.writestr(f'rejeitados/{nome_limpo}', conteudo_xml)
                             dados_gerais["rejeitados"]["qtd"] += 1
                             dados_gerais["rejeitados"]["valor"] += v_nf
                             dados_gerais["rejeitados"]["icms"] += v_icms
-                            lista_detalhes_rejeicao.append([nome_arquivo, cstat_value, xmotivo_value])
+                            lista_detalhes_rejeicao.append([nome_limpo, cstat_value, xmotivo_value])
                         
                         else:
                             # --- VALIDAÇÃO 2: Verificar Tipo de Emissão (tpEmis) ---
@@ -165,13 +170,13 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
                             # --- REGRA DE NEGÓCIO 2: Classificar Aprovados vs Contingência ---
                             # tpEmis = 1: Emissão Normal -> Pasta 'aprovados/'
                             if tpemis_value == '1':
-                                zip_out.writestr(f'aprovados/{nome_arquivo}', conteudo_xml)
+                                zip_out.writestr(f'aprovados/{nome_limpo}', conteudo_xml)
                                 dados_gerais["aprovados"]["qtd"] += 1
                                 dados_gerais["aprovados"]["valor"] += v_nf
                                 dados_gerais["aprovados"]["icms"] += v_icms
                             # Outros valores (EX: 9): Contingência -> Pasta 'contingencia/'
                             else: 
-                                zip_out.writestr(f'contingencia/{nome_arquivo}', conteudo_xml)
+                                zip_out.writestr(f'contingencia/{nome_limpo}', conteudo_xml)
                                 dados_gerais["contingencia"]["qtd"] += 1
                                 dados_gerais["contingencia"]["valor"] += v_nf
                                 dados_gerais["contingencia"]["icms"] += v_icms
@@ -179,9 +184,9 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
                     except ET.ParseError:
                         # Se o arquivo .xml estiver corrompido ou mal formatado
                         print(f"Erro ao analisar o XML: {nome_arquivo}")
-                        zip_out.writestr(f'rejeitados/{nome_arquivo}', conteudo_xml)
+                        zip_out.writestr(f'rejeitados/{nome_limpo}', conteudo_xml)
                         dados_gerais["rejeitados"]["qtd"] += 1
-                        lista_detalhes_rejeicao.append([nome_arquivo, "ERRO_PARSE", "Arquivo XML inválido ou corrompido"])
+                        lista_detalhes_rejeicao.append([nome_limpo, "ERRO_PARSE", "Arquivo XML inválido ou corrompido"])
 
             # --- GERAÇÃO DO RELATÓRIO DE REJEIÇÕES (CSV) ---
             if lista_detalhes_rejeicao:
@@ -294,7 +299,7 @@ async def processar_zip(arquivo: UploadFile = File(...)):
 
 
 
-"""""
+"""
 # === ENDPOINT PARA VÁRIOS XMLS ===
 @app.post("/processar-xmls/")
 def processar_xmls(arquivos: List[UploadFile] = File(...)):
@@ -317,6 +322,7 @@ def processar_xmls(arquivos: List[UploadFile] = File(...)):
             # Lê o conteúdo do XML
             conteudo_xml = arquivo.read()
             nome_arquivo = arquivo.filename # Guardamos o nome
+            nome_limpo = os.path.basename(nome_arquivo) # Flattening
             
             # --- Etapa 2: Validar o XML (Lógica IDÊNTICA) ---
             # (Esta lógica é copiada exatamente do 'processar_zip')
@@ -336,7 +342,7 @@ def processar_xmls(arquivos: List[UploadFile] = File(...)):
                 
                 # REGRA 1: REJEITADOS
                 if cstat_value not in ['100', '150']:
-                    rejeitados.append((nome_arquivo, conteudo_xml))
+                    rejeitados.append((nome_limpo, conteudo_xml))
                 
                 # Se o cStat for 100 ou 150...
                 else:
@@ -350,16 +356,16 @@ def processar_xmls(arquivos: List[UploadFile] = File(...)):
 
                     # REGRA 2: APROVADOS (Normais)
                     if tpemis_value == '1':
-                        aprovados.append((nome_arquivo, conteudo_xml))
+                        aprovados.append((nome_limpo, conteudo_xml))
                     
                     # REGRA 3: CONTINGÊNCIA
                     else:
-                        contingencia.append((nome_arquivo, conteudo_xml))
+                        contingencia.append((nome_limpo, conteudo_xml))
 
             except ET.ParseError:
                 # Se o XML estiver corrompido ou for inválido
                 print(f"Erro ao analisar o XML: {nome_arquivo}")
-                rejeitados.append((nome_arquivo, conteudo_xml))
+                rejeitados.append((nome_limpo, conteudo_xml))
 
 
     # --- Etapa 3: Criar o novo ZIP de resposta (IDÊNTICA) ---

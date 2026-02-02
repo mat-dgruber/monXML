@@ -1,70 +1,53 @@
-# Frontend MonXML (Angular)
+# 🖥️ Frontend MonXML
 
-Interface web moderna desenvolvida em **Angular v18+** utilizando **PrimeNG** para oferecer uma experiência de usuário robusta no upload e gerenciamento de arquivos XML.
+![Angular](https://img.shields.io/badge/Angular-v20+-DD0031?style=flat-square&logo=angular&logoColor=white)
+![PrimeNG](https://img.shields.io/badge/PrimeNG-v21+-blue?style=flat-square)
+![Tailwind](https://img.shields.io/badge/Tailwind_CSS-v3.4-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white)
 
-## 🚀 Tecnologias
+Interface moderna e responsiva para interação com o sistema MonXML. Focada em UX, feedback visual e performance.
 
-* **Angular:** Framework SPA (Single Page Application).
-* **PrimeNG:** Biblioteca de componentes UI (v21+).
-* **TailwindCSS:** Utilitários CSS para estilização rápida.
-* **JSZip:** Biblioteca para compactação de arquivos ZIP no navegador.
+## ✨ Destaques de UX/UI
 
-## ⚙️ Instalação e Execução Local
+- **Upload Drag & Drop:** Suporte a arquivos individuais e ZIPs.
+- **Feedback em Tempo Real:** Indicadores visuais de progresso e processamento.
+- **Dark Mode:** Tema inteligente que se adapta à preferência do sistema.
+- **Client-Side ZIP:** Compactação de múltiplos arquivos no navegador antes do envio.
+
+## 🚀 Como Rodar
 
 ### Pré-requisitos
+- Node.js v18+
+- Angular CLI
 
-* Node.js (v18 ou superior) instalado.
-* Angular CLI instalado globalmente (`npm install -g @angular/cli`).
+### Desenvolvimento Local
 
-### Passo a Passo
-
-1. **Acesse a pasta do frontend:**
-
+1.  **Instale as dependências:**
     ```bash
     cd frontend
-    ```
-
-2. **Instale as dependências:**
-
-    ```bash
-    # Use --legacy-peer-deps se houver conflitos de versão com PrimeNG
     npm install --legacy-peer-deps
     ```
 
-3. **Execute o servidor de desenvolvimento:**
-
+2.  **Inicie o servidor:**
     ```bash
     ng serve
     ```
+    
+    > Acesse em `http://localhost:4200`
 
-    A aplicação estará disponível em `http://localhost:4200`.
+## 🐳 Docker
 
-## 🐳 Executando com Docker
+```bash
+# Build
+docker build -t monxml-frontend .
 
-Você pode rodar apenas o frontend em um container Nginx:
+# Run (Nginx)
+docker run -p 4200:80 monxml-frontend
+```
 
-1. **Construir a imagem:**
+## 🧩 Componentes Chave
 
-    ```bash
-    docker build -t monxml-frontend .
-    ```
+- `file-upload`: Gerencia a seleção, validação e envio de arquivos.
+- `danfe-modal`: Exibição de detalhes da nota (em desenvolvimento).
 
-2. **Rodar o container:**
-
-    ```bash
-    docker run -p 4200:80 monxml-frontend
-    ```
-
-    Acesse em `http://localhost:4200`.
-
-## 📂 Principais Componentes
-
-* **File Upload:** Componente personalizado (`src/app/components/file-upload`) que permite:
-  * Upload de arquivo único (.zip) ou múltiplos (.xml).
-  * Compactação automática de múltiplos XMLs usando JSZip antes do envio.
-  * Visualização de progresso com componente **Knob**.
-  * Lista de arquivos selecionados antes do processamento.
-
-## 🖌️ Estilização
-
-O projeto utiliza o tema **Aura** do PrimeNG com suporte a modo escuro (Dark Mode) detectado via sistema ou classe CSS. TailwindCSS é usado para layout e espaçamentos.
+> [!NOTE]
+> **Observação:** O download retornado pelo backend virá em formato ZIP com estrutura de pastas simplificada (flattened).
