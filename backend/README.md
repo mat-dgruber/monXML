@@ -1,78 +1,65 @@
-# Backend MonXML (FastAPI)
+# ⚙️ Backend MonXML
 
-API desenvolvida em Python com **FastAPI** para processar, validar e organizar arquivos XML de Notas Fiscais Eletrônicas (NF-e). A aplicação é capaz de processar arquivos ZIP contendo múltiplos XMLs ou receber listas de arquivos diretamente.
+![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688?style=flat-square&logo=fastapi&logoColor=white)
+![Manager](https://img.shields.io/badge/Package_Manager-UV-purple?style=flat-square)
 
-## 🚀 Tecnologias
+API de alta performance para processamento e validação de documentos fiscais eletrônicos (NF-e). Construída sobre o ecossistema moderno do Python.
 
-* **Python 3.13+**
-* **FastAPI:** Framework web moderno e rápido.
-* **Uvicorn:** Servidor ASGI para produção.
-* **lxml:** Biblioteca de processamento XML de alta performance.
-* **Starlette:** Ferramentais assíncronos (usado para `run_in_threadpool`).
+## ⚡ Features Técnicas
 
-## ⚙️ Instalação e Execução Local
+- **Async Core:** Baseado em ASGI para alta concorrência.
+- **High Performance XML:** Uso de `lxml` para parsing C-speed.
+- **Smart Validation:** Regras de negócio SEFAZ integradas.
+- **Zero-Disk I/O:** Processamento 100% em memória RAM.
+
+## 🛠️ Instalação & Setup
 
 ### Pré-requisitos
+- Python 3.13+
+- UV (Opcional, mas recomendado)
 
-* Python 3.13 ou superior instalado.
+### Executando Localmente
 
-### Passo a Passo
-
-1. **Acesse a pasta do backend:**
-
+1.  **Navegue até o diretório:**
     ```bash
     cd backend
     ```
 
-2. **Crie um ambiente virtual (recomendado):**
-
+2.  **Instale as dependências:**
     ```bash
-    python -m venv .venv
-    # Windows:
-    .venv\Scripts\activate
-    # Linux/Mac:
-    source .venv/bin/activate
-    ```
-
-3. **Instale as dependências:**
-
-    ```bash
+    # Via pip padrão
     pip install -r requirements.txt
+    
+    # OU via UV (Moderno)
+    uv sync
     ```
 
-4. **Execute o servidor:**
-
+3.  **Execute o servidor:**
     ```bash
-    # Importante: execute a partir da pasta 'backend'
+    # Modo Desenvolvimento
+    uv run main.py
+    
+    # OU
     python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     ```
 
-    O servidor estará rodando em `http://localhost:8000`.
-    A documentação interativa (Swagger UI) está disponível em `http://localhost:8000/docs`.
+    > O servidor iniciará em `http://localhost:8000`
 
-## 🐳 Executando com Docker
+## 🐳 Docker
 
-Se preferir não instalar o Python localmente, use o Docker:
+```bash
+# Build
+docker build -t monxml-backend .
 
-1. **Construir a imagem:**
+# Run
+docker run -p 8000:8000 monxml-backend
+```
 
-    ```bash
-    docker build -t monxml-backend .
-    ```
+## 🧩 Detalhes de Implementação
 
-2. **Rodar o container:**
+> [!NOTE]
+> **Processamento Assíncrono:** O endpoint principal `/processar-zip/` utiliza `run_in_threadpool` para evitar o bloqueio do Event Loop durante o processamento CPU-intensive do ZIP e XML.
 
-    ```bash
-    docker run -p 8000:8000 monxml-backend
-    ```
-
-## 📂 Estrutura do Projeto
-
-* `main.py`: Arquivo principal contendo a aplicação, rotas e lógica de validação.
-* `requirements.txt`: Lista de dependências do projeto.
-* `Dockerfile`: Configuração para containerização.
-
-## 🛠️ Detalhes da Implementação
-
-* **Processamento Síncrono vs Assíncrono:** O endpoint `/processar-zip/` é assíncrono (`async`) para lidar com I/O de rede eficientemente, mas delega o processamento pesado de XML e ZIP para uma thread separada (`run_in_threadpool`) para não bloquear o servidor.
-* **Validação XML:** Utiliza `lxml` para verificar as tags `cStat` (Status da Nota) e `tpEmis` (Tipo de Emissão) para categorizar os arquivos em pastas: `aprovados`, `rejeitados` ou `contingencia`.
+> [!IMPORTANT]
+> **Flattening:** A saída do processamento resulta sempre em um ZIP com estrutura "achatada", removendo subpastas para facilitar o acesso aos arquivos.

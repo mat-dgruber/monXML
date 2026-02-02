@@ -3,6 +3,7 @@ import io
 import zipfile
 import csv
 import time
+import os
 
 # Importamos 'etree' do lxml para parsing de XML de alta performance
 from lxml import etree as ET
@@ -37,7 +38,11 @@ app.add_middleware(
     allow_credentials=True,   # Permitir cookies/credenciais
     allow_methods=["*"],      # Permitir todos os métodos (GET, POST, OPTIONS, etc.)
     allow_headers=["*"],      # Permitir todos os headers
-    expose_headers=["X-Count-Approved", "X-Count-Contingency", "X-Count-Rejected"] # Importante!
+    expose_headers=[
+        "X-Count-Approved", "X-Count-Contingency", "X-Count-Rejected",
+        "X-Value-Approved", "X-Value-Contingency", "X-Value-Rejected",
+        "X-Icms-Approved", "X-Icms-Contingency", "X-Icms-Rejected"
+    ] # Importante!
 )
 
 
@@ -64,11 +69,11 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
     # Listas para guardar tuplas (nome_arquivo, cstat, xmotivo)
     lista_detalhes_rejeicao = []
     
-    # Contadores
-    stats = {
-        "aprovados": 0,
-        "contingencia": 0,
-        "rejeitados": 0
+    # Estrutura de acumuladores para o relatório geral (qtd, valor, icms)
+    dados_gerais = {
+        "aprovados": {"qtd": 0, "valor": 0.0, "icms": 0.0},
+        "contingencia": {"qtd": 0, "valor": 0.0, "icms": 0.0},
+        "rejeitados": {"qtd": 0, "valor": 0.0, "icms": 0.0}
     }
 
     # Criamos um buffer em memória para o ZIP de saída (evita gravar em disco = + performance)
@@ -90,12 +95,40 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
 
                     # Lê o conteúdo binário do XML específico
                     conteudo_xml = zip_in.read(nome_arquivo)
+
+                    # --- FIX: FLATTEN PATH ---
+                    # Usa apenas o nome do arquivo, ignorando as pastas de origem
+                    nome_limpo = os.path.basename(nome_arquivo)
                     
                     # --- Lógica de Validação: cStat ---
                     try:
                         # Parsing do XML para árvore de elementos (DOM)
                         root = ET.fromstring(conteudo_xml)
                         
+                        # --- Extração de Valores Financeiros (vNF e vICMS) ---
+                        v_nf = 0.0
+                        v_icms = 0.0
+                        
+                        # Busca o nó ICMSTot para extrair totais
+                        icmstot_node = None
+                        for node in root.iter():
+                            if node.tag.endswith('ICMSTot'):
+                                icmstot_node = node
+                                break
+                        
+                        if icmstot_node is not None:
+                            for child in icmstot_node:
+                                if child.tag.endswith('vNF') and child.text:
+                                    try:
+                                        v_nf = float(child.text)
+                                    except ValueError:
+                                        pass
+                                elif child.tag.endswith('vICMS') and child.text:
+                                    try:
+                                        v_icms = float(child.text)
+                                    except ValueError:
+                                        pass
+
                         # Definição dos namespaces geralmente usados na NFe
                         ns = {'ns': 'http://www.portalfiscal.inf.br/nfe'}
                         
@@ -118,9 +151,11 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
                         # Se cStat não for 100 (Autorizado) ou 150 (Autorizado Fora de Prazo), é REJEITADO.
                         if cstat_value not in ['100', '150']:
                             # Gravamos na pasta 'rejeitados/' dentro do novo ZIP
-                            zip_out.writestr(f'rejeitados/{nome_arquivo}', conteudo_xml)
-                            stats["rejeitados"] += 1
-                            lista_detalhes_rejeicao.append([nome_arquivo, cstat_value, xmotivo_value])
+                            zip_out.writestr(f'rejeitados/{nome_limpo}', conteudo_xml)
+                            dados_gerais["rejeitados"]["qtd"] += 1
+                            dados_gerais["rejeitados"]["valor"] += v_nf
+                            dados_gerais["rejeitados"]["icms"] += v_icms
+                            lista_detalhes_rejeicao.append([nome_limpo, cstat_value, xmotivo_value])
                         
                         else:
                             # --- VALIDAÇÃO 2: Verificar Tipo de Emissão (tpEmis) ---
@@ -135,19 +170,23 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
                             # --- REGRA DE NEGÓCIO 2: Classificar Aprovados vs Contingência ---
                             # tpEmis = 1: Emissão Normal -> Pasta 'aprovados/'
                             if tpemis_value == '1':
-                                zip_out.writestr(f'aprovados/{nome_arquivo}', conteudo_xml)
-                                stats["aprovados"] += 1
+                                zip_out.writestr(f'aprovados/{nome_limpo}', conteudo_xml)
+                                dados_gerais["aprovados"]["qtd"] += 1
+                                dados_gerais["aprovados"]["valor"] += v_nf
+                                dados_gerais["aprovados"]["icms"] += v_icms
                             # Outros valores (EX: 9): Contingência -> Pasta 'contingencia/'
                             else: 
-                                zip_out.writestr(f'contingencia/{nome_arquivo}', conteudo_xml)
-                                stats["contingencia"] += 1
+                                zip_out.writestr(f'contingencia/{nome_limpo}', conteudo_xml)
+                                dados_gerais["contingencia"]["qtd"] += 1
+                                dados_gerais["contingencia"]["valor"] += v_nf
+                                dados_gerais["contingencia"]["icms"] += v_icms
                         
                     except ET.ParseError:
                         # Se o arquivo .xml estiver corrompido ou mal formatado
                         print(f"Erro ao analisar o XML: {nome_arquivo}")
-                        zip_out.writestr(f'rejeitados/{nome_arquivo}', conteudo_xml)
-                        stats["rejeitados"] += 1
-                        lista_detalhes_rejeicao.append([nome_arquivo, "ERRO_PARSE", "Arquivo XML inválido ou corrompido"])
+                        zip_out.writestr(f'rejeitados/{nome_limpo}', conteudo_xml)
+                        dados_gerais["rejeitados"]["qtd"] += 1
+                        lista_detalhes_rejeicao.append([nome_limpo, "ERRO_PARSE", "Arquivo XML inválido ou corrompido"])
 
             # --- GERAÇÃO DO RELATÓRIO DE REJEIÇÕES (CSV) ---
             if lista_detalhes_rejeicao:
@@ -159,6 +198,37 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
                 # Grava o CSV no ZIP
                 zip_out.writestr('rejeitados/relatorio_erros.csv', csv_buffer.getvalue().encode('utf-8-sig')) # utf-8-sig para Excel abrir direto
 
+            # --- GERAÇÃO DO RELATÓRIO GERAL (CSV) ---
+            csv_buffer_geral = io.StringIO()
+            writer_geral = csv.writer(csv_buffer_geral, delimiter=';')
+            writer_geral.writerow(['Categoria', 'Quantidade', 'Valor Total (R$)', 'ICMS Total (R$)'])
+            
+            total_qtd = 0
+            total_valor = 0.0
+            total_icms = 0.0
+            
+            categorias = ['aprovados', 'contingencia', 'rejeitados']
+            for cat in categorias:
+                dados = dados_gerais[cat]
+                writer_geral.writerow([
+                    cat.capitalize(), 
+                    dados['qtd'], 
+                    f"{dados['valor']:.2f}".replace('.', ','), 
+                    f"{dados['icms']:.2f}".replace('.', ',')
+                ])
+                total_qtd += dados['qtd']
+                total_valor += dados['valor']
+                total_icms += dados['icms']
+            
+            writer_geral.writerow([
+                'TOTAL GERAL', 
+                total_qtd, 
+                f"{total_valor:.2f}".replace('.', ','), 
+                f"{total_icms:.2f}".replace('.', ',')
+            ])
+            
+            zip_out.writestr('relatorio_geral.csv', csv_buffer_geral.getvalue().encode('utf-8-sig'))
+
         except zipfile.BadZipFile:
             # Caso o arquivo enviado pelo usuário não seja um ZIP válido
             print("Erro: Ficheiro não é um ZIP válido.")
@@ -167,7 +237,8 @@ def processar_zip_sync(conteudo_zip_recebido: bytes) -> io.BytesIO:
     # "Rebobina" o ponteiro do arquivo em memória para o início (byte 0) para que possa ser lido
     memoria_zip_saida.seek(0)
     
-    return memoria_zip_saida, stats
+    # Retorna a estrutura completa de dados_gerais para uso nos headers
+    return memoria_zip_saida, dados_gerais
 
 
 # -------------------------------------------------------------------
@@ -207,9 +278,15 @@ async def processar_zip(arquivo: UploadFile = File(...)):
     # Headers customizados com o resumo
     headers = {
         "Content-Disposition": "attachment; filename=xmls_processados.zip",
-        "X-Count-Approved": str(stats["aprovados"]),
-        "X-Count-Contingency": str(stats["contingencia"]),
-        "X-Count-Rejected": str(stats["rejeitados"])
+        "X-Count-Approved": str(stats["aprovados"]["qtd"]),
+        "X-Count-Contingency": str(stats["contingencia"]["qtd"]),
+        "X-Count-Rejected": str(stats["rejeitados"]["qtd"]),
+        "X-Value-Approved": f"{stats['aprovados']['valor']:.2f}",
+        "X-Value-Contingency": f"{stats['contingencia']['valor']:.2f}",
+        "X-Value-Rejected": f"{stats['rejeitados']['valor']:.2f}",
+        "X-Icms-Approved": f"{stats['aprovados']['icms']:.2f}",
+        "X-Icms-Contingency": f"{stats['contingencia']['icms']:.2f}",
+        "X-Icms-Rejected": f"{stats['rejeitados']['icms']:.2f}",
     }
     
     # Expose headers para o CORS (importante para o Angular conseguir ler)
@@ -222,7 +299,7 @@ async def processar_zip(arquivo: UploadFile = File(...)):
 
 
 
-"""""
+"""
 # === ENDPOINT PARA VÁRIOS XMLS ===
 @app.post("/processar-xmls/")
 def processar_xmls(arquivos: List[UploadFile] = File(...)):
@@ -245,6 +322,7 @@ def processar_xmls(arquivos: List[UploadFile] = File(...)):
             # Lê o conteúdo do XML
             conteudo_xml = arquivo.read()
             nome_arquivo = arquivo.filename # Guardamos o nome
+            nome_limpo = os.path.basename(nome_arquivo) # Flattening
             
             # --- Etapa 2: Validar o XML (Lógica IDÊNTICA) ---
             # (Esta lógica é copiada exatamente do 'processar_zip')
@@ -264,7 +342,7 @@ def processar_xmls(arquivos: List[UploadFile] = File(...)):
                 
                 # REGRA 1: REJEITADOS
                 if cstat_value not in ['100', '150']:
-                    rejeitados.append((nome_arquivo, conteudo_xml))
+                    rejeitados.append((nome_limpo, conteudo_xml))
                 
                 # Se o cStat for 100 ou 150...
                 else:
@@ -278,16 +356,16 @@ def processar_xmls(arquivos: List[UploadFile] = File(...)):
 
                     # REGRA 2: APROVADOS (Normais)
                     if tpemis_value == '1':
-                        aprovados.append((nome_arquivo, conteudo_xml))
+                        aprovados.append((nome_limpo, conteudo_xml))
                     
                     # REGRA 3: CONTINGÊNCIA
                     else:
-                        contingencia.append((nome_arquivo, conteudo_xml))
+                        contingencia.append((nome_limpo, conteudo_xml))
 
             except ET.ParseError:
                 # Se o XML estiver corrompido ou for inválido
                 print(f"Erro ao analisar o XML: {nome_arquivo}")
-                rejeitados.append((nome_arquivo, conteudo_xml))
+                rejeitados.append((nome_limpo, conteudo_xml))
 
 
     # --- Etapa 3: Criar o novo ZIP de resposta (IDÊNTICA) ---
@@ -315,7 +393,7 @@ def processar_xmls(arquivos: List[UploadFile] = File(...)):
             "Content-Disposition": "attachment; filename=xmls_processados.zip"
         }
     )
-
+PARQUE ESPLANADA III
 """
 
 # Bloco para correr o servidor
