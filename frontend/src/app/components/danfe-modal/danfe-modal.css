@@ -1,0 +1,44 @@
+@media print {
+    :host ::ng-deep .p-dialog-header,
+    :host ::ng-deep .p-dialog-footer,
+    :host ::ng-deep .no-print {
+        display: none !important;
+    }
+
+    :host ::ng-deep .p-dialog {
+        box-shadow: none;
+        border: none;
+        max-height: none !important;
+        height: auto !important;
+        width: 100% !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        margin: 0 !important;
+    }
+
+    :host ::ng-deep .p-dialog-content {
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+
+    :host ::ng-deep .p-component-overlay {
+        background: transparent !important;
+        backdrop-filter: none !important;
+    }
+
+    /* Hide everything else on the page */
+    body > *:not(app-root) {
+        display: none;
+    }
+
+    /* This is tricky in Angular single page apps.
+       Usually better to use a specific print stylesheet that hides the app-shell
+       and makes the modal content full screen.
+
+       For now, we rely on the modal covering most things.
+    */
+    .danfe-container {
+        border: none !important;
+    }
+}

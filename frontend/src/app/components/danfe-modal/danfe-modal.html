@@ -1,0 +1,131 @@
+<p-dialog [visible]="visible" (visibleChange)="updateVisible($event)" [modal]="true"
+  [style]="{width: '210mm', maxWidth: '95vw'}" [maximizable]="true" (onHide)="close()" (onShow)="onShow()"
+  header="DANFE - Documento Auxiliar da Nota Fiscal Eletrônica">
+
+  <div *ngIf="nfeData" class="danfe-container p-4 font-mono text-xs">
+
+    <!-- HEADER / EMITENTE -->
+    <div class="border-2 border-black mb-2 p-2 grid grid-cols-12 gap-2">
+      <div class="col-span-5 border-r border-black pr-2">
+        <h3 class="font-bold text-lg mb-1">{{ nfeData.emit.xNome }}</h3>
+        <p>{{ nfeData.emit.ender.xLgr }}, {{ nfeData.emit.ender.nro }}</p>
+        <p>{{ nfeData.emit.ender.xBairro }} - {{ nfeData.emit.ender.xMun }} / {{ nfeData.emit.ender.uf }}</p>
+        <p>CNPJ: {{ nfeData.emit.cnpj }} | IE: {{ nfeData.emit.ie }}</p>
+      </div>
+
+      <div class="col-span-2 text-center border-r border-black flex flex-col justify-center">
+        <h1 class="text-3xl font-bold">DANFE</h1>
+        <p>Tipo: {{ nfeData.tpNF === '1' ? '1 - Saída' : '0 - Entrada' }}</p>
+        <p class="font-bold">Nº {{ nfeData.nNF }}</p>
+        <p>Série {{ nfeData.serie }}</p>
+      </div>
+
+      <div class="col-span-5 pl-2 flex flex-col items-center">
+        <svg #barcode class="w-full"></svg>
+        <p class="text-[10px] mt-1 break-all">{{ nfeData.chave }}</p>
+      </div>
+    </div>
+
+    <!-- NATUREZA DA OPERAÇÃO -->
+    <div class="border border-black mb-2 p-1 bg-gray-100">
+      <span class="font-bold">Natureza da Operação:</span> {{ nfeData.natOp }}
+    </div>
+
+    <!-- DESTINATÁRIO -->
+    <div class="border border-black mb-2">
+      <div class="bg-gray-200 font-bold p-1 border-b border-black text-center">DESTINATÁRIO / REMETENTE</div>
+      <div class="p-2 grid grid-cols-12 gap-2">
+        <div class="col-span-6">
+          <label class="block text-[10px] uppercase text-gray-500">Nome / Razão Social</label>
+          <span class="font-bold">{{ nfeData.dest.xNome }}</span>
+        </div>
+        <div class="col-span-4">
+          <label class="block text-[10px] uppercase text-gray-500">CNPJ / CPF</label>
+          <span>{{ nfeData.dest.cnpj }}</span>
+        </div>
+        <div class="col-span-2">
+          <label class="block text-[10px] uppercase text-gray-500">Data Emissão</label>
+          <span>{{ formatDate(nfeData.dhEmi) }}</span>
+        </div>
+
+        <div class="col-span-6 mt-2">
+          <label class="block text-[10px] uppercase text-gray-500">Endereço</label>
+          <span>{{ nfeData.dest.ender.xLgr }}, {{ nfeData.dest.ender.nro }} - {{ nfeData.dest.ender.xBairro
+            }}</span>
+        </div>
+        <div class="col-span-4 mt-2">
+          <label class="block text-[10px] uppercase text-gray-500">Município / UF</label>
+          <span>{{ nfeData.dest.ender.xMun }} / {{ nfeData.dest.ender.uf }}</span>
+        </div>
+        <div class="col-span-2 mt-2">
+          <label class="block text-[10px] uppercase text-gray-500">Inscrição Estadual</label>
+          <span>{{ nfeData.dest.ie }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOTAIS -->
+    <div class="border border-black mb-2">
+      <div class="bg-gray-200 font-bold p-1 border-b border-black text-center">CÁLCULO DO IMPOSTO</div>
+      <div class="grid grid-cols-4 gap-0 text-center divide-x divide-black">
+        <div class="p-1">
+          <label class="block text-[9px]">Base de Cálculo ICMS</label>
+          <span class="font-bold">{{ formatCurrency(nfeData.total.vBC) }}</span>
+        </div>
+        <div class="p-1">
+          <label class="block text-[9px]">Valor do ICMS</label>
+          <span class="font-bold">{{ formatCurrency(nfeData.total.vICMS) }}</span>
+        </div>
+        <div class="p-1">
+          <label class="block text-[9px]">Valor Total dos Produtos</label>
+          <span class="font-bold">{{ formatCurrency(nfeData.total.vProd) }}</span>
+        </div>
+        <div class="p-1 bg-gray-100">
+          <label class="block text-[9px]">Valor Total da Nota</label>
+          <span class="font-bold text-sm">{{ formatCurrency(nfeData.total.vNF) }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRODUTOS -->
+    <h4 class="font-bold mb-1">DADOS DO PRODUTO / SERVIÇO</h4>
+    <div class="border border-black text-xs">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-gray-200 text-[10px]">
+            <th class="p-1 border-r border-b border-black">Cód.</th>
+            <th class="p-1 border-r border-b border-black w-1/2">Descrição</th>
+            <th class="p-1 border-r border-b border-black">NCM</th>
+            <th class="p-1 border-r border-b border-black">CFOP</th>
+            <th class="p-1 border-r border-b border-black">Unid</th>
+            <th class="p-1 border-r border-b border-black text-right">Qtd.</th>
+            <th class="p-1 border-r border-b border-black text-right">V.Unit</th>
+            <th class="p-1 border-b border-black text-right">V.Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of nfeData.det" class="even:bg-gray-50">
+            <td class="p-1 border-r border-gray-300">{{ item.cProd }}</td>
+            <td class="p-1 border-r border-gray-300">{{ item.xProd }}</td>
+            <td class="p-1 border-r border-gray-300">{{ item.ncm }}</td>
+            <td class="p-1 border-r border-gray-300">{{ item.cfop }}</td>
+            <td class="p-1 border-r border-gray-300">{{ item.uCom }}</td>
+            <td class="p-1 border-r border-gray-300 text-right">{{ item.qCom }}</td>
+            <td class="p-1 border-r border-gray-300 text-right">{{ formatCurrency(item.vUnCom).replace('R$',
+              '').trim() }}</td>
+            <td class="p-1 text-right font-bold">{{ formatCurrency(item.vProd).replace('R$', '').trim() }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex justify-end gap-2 no-print">
+      <p-button label="Imprimir / Salvar PDF" icon="pi pi-print" (onClick)="print()"></p-button>
+      <p-button label="Fechar" icon="pi pi-times" [outlined]="true" (onClick)="close()"></p-button>
+    </div>
+  </ng-template>
+</p-dialog>
